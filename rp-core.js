@@ -1,5 +1,5 @@
 // ============================================================
-// Rukmini Pharmacy — Core Data Engine v3.0
+// Pooja Pharmacy — Core Data Engine v3.0
 // PRIMARY DATABASE : Google Sheets (shared across all devices)
 // LOCAL CACHE      : localStorage (speeds up page loads)
 // ============================================================

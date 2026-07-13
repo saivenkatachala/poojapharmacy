@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Bill Generation — Rukmini Pharmacy</title>
+<title>Bill Generation — Pooja Pharmacy</title>
 <link rel="icon" href="pp.png">
 <link rel="stylesheet" href="rp-styles.css"/>
 <style>
@@ -105,13 +105,12 @@
 <body>
 <nav class="navbar">
   <a href="dashboard.html" class="navbar-brand">
-    <div class="brand-icon">&#128138;</div><span>Rukmini Pharmacy</span>
+    <div class="brand-icon">&#128138;</div><span>Pooja Pharmacy</span>
   </a>
   <div class="navbar-nav">
     <a href="dashboard.html" class="nav-link">&#127968; <span class="nav-text">Home</span></a>
     <a href="add-stock.html" class="nav-link">&#10133; <span class="nav-text">Add Stock</span></a>
     <a href="view-stock.html" class="nav-link">&#128230; <span class="nav-text">View Stock</span></a>
-    <a href="sort-stock.html" class="nav-link">&#8964; <span class="nav-text">Sort Stock</span></a>
     <a href="stock-sale.html" class="nav-link">&#128200; <span class="nav-text">Stock Sale</span></a>
     <a href="billing.html" class="nav-link active">&#128451; <span class="nav-text">Bill Generation</span></a>
     <a href="scan-stock.html" class="nav-link">&#128247; <span class="nav-text">Scan Stock</span></a>
@@ -560,7 +559,7 @@ function buildPrintBill(bill){
     '<div class="bill-doc-hdr">'+
       '<div class="bill-doc-hdr-row">'+
         '<div>'+
-          '<div class="bill-doc-name">RUKMINI PHARMACY</div>'+
+          '<div class="bill-doc-name">POOJA PHARMACY</div>'+
           '<div class="bill-doc-sub">Authorised Pharmaceutical Retailer</div>'+
           '<div class="bill-doc-sub" style="margin-top:3px;">Email: saivenkatachala@gmail.com</div>'+
         '</div>'+
@@ -583,7 +582,7 @@ function buildPrintBill(bill){
       '</div>'+
       '<div class="bill-doc-info-box">'+
         '<div class="bill-doc-lbl">Pharmacy Details</div>'+
-        '<div class="bill-doc-val">Rukmini Pharmacy</div>'+
+        '<div class="bill-doc-val">Pooja Pharmacy</div>'+
         '<div class="bill-doc-detail">'+
           (bill.doctor?'Prescribed by: Dr. '+esc(bill.doctor)+'<br>':'')+
           'Ref No: '+esc(bill.billNo)+'<br>'+
@@ -611,9 +610,9 @@ function buildPrintBill(bill){
         '<div class="bill-doc-sig-box">Patient Signature</div>'+
         '<div class="bill-doc-sig-box">Pharmacist Signature</div>'+
       '</div>'+
-      '<div class="bill-doc-note">Computer generated bill. Thank you for choosing Rukmini Pharmacy.</div>'+
+      '<div class="bill-doc-note">Computer generated bill. Thank you for choosing Pooja Pharmacy.</div>'+
     '</div>'+
-    '<div class="bill-doc-bottom">Rukmini Pharmacy &nbsp;|&nbsp; saivenkatachala@gmail.com</div>'+
+    '<div class="bill-doc-bottom">Pooja Pharmacy &nbsp;|&nbsp; saivenkatachala@gmail.com</div>'+
   '</div>';
 
   document.getElementById('print-bill').innerHTML=html;

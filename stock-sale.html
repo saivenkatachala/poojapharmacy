@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Stock Sale — Rukmini Pharmacy</title>
+<title>Stock Sale — Pooja Pharmacy</title>
 <link rel="icon" href="pp.png">
 <link rel="stylesheet" href="rp-styles.css"/>
 <style>
@@ -59,16 +59,15 @@
 <body>
 <nav class="navbar">
   <a href="dashboard.html" class="navbar-brand">
-    <div class="brand-icon">&#128138;</div><span>Rukmini Pharmacy</span>
+    <div class="brand-icon">&#128138;</div><span>Pooja Pharmacy</span>
   </a>
   <div class="navbar-nav">
     <a href="dashboard.html" class="nav-link">&#127968; <span class="nav-text">Home</span></a>
     <a href="add-stock.html" class="nav-link">&#10133; <span class="nav-text">Add Stock</span></a>
+    <a href="stock-sale.html" class="nav-link active">&#128200; <span class="nav-text">Stock Sale</span></a>
     <a href="view-stock.html" class="nav-link">&#128230; <span class="nav-text">View Stock</span></a>
-    <a href="sort-stock.html" class="nav-link">&#8964; <span class="nav-text">Sort Stock</span></a>
     <a href="billing.html" class="nav-link">&#128451; <span class="nav-text">Bill Generation</span></a>
     <a href="scan-stock.html" class="nav-link">&#128247; <span class="nav-text">Scan Stock</span></a>
-    <a href="stock-sale.html" class="nav-link active">&#128200; <span class="nav-text">Stock Sale</span></a>
     <a href="alerts.html" class="nav-link">&#128276; <span class="nav-text">Alerts</span>
       <span class="badge" id="alert-badge" style="display:none">0</span></a>
   </div>
@@ -603,7 +602,7 @@ function downloadSalesCSV(){
   var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='rukmini-sales-'+filter+'-'+localDateStr()+'.csv';
+  a.download='pooja-sales-'+filter+'-'+localDateStr()+'.csv';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

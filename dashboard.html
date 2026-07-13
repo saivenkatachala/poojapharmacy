@@ -3,22 +3,179 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Dashboard — Rukmini Pharmacy</title>
+<title>Dashboard — Pooja Pharmacy</title>
 <link rel="icon" href="pp.png">
 <link rel="stylesheet" href="rp-styles.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  /* ============================================================
+     INTRO SCENE — real WebGL 3D scroll story (Three.js)
+     Beat 1: medicines fly from a supply truck into rack slots
+     Beat 2: a slot flashes red — low stock alert fires
+     Beat 3: a refill arrives — admin "stock received" alert fires, slot resolves
+     ============================================================ */
+  .intro-scene{
+    position:relative;height:380vh;background:var(--bg);
+  }
+  .intro-stage{
+    position:sticky;top:0;left:0;width:100%;height:100vh;
+    overflow:hidden;
+  }
+  #intro-canvas{
+    position:absolute;inset:0;width:100%;height:100%;display:block;
+  }
+  .intro-vignette{
+    position:absolute;inset:0;pointer-events:none;z-index:5;
+    background:radial-gradient(ellipse 90% 70% at 50% 50%, transparent 50%, var(--bg) 100%);
+  }
+  .intro-copy{
+    position:absolute;top:7%;left:0;right:0;text-align:center;z-index:30;
+    pointer-events:none;
+  }
+  .intro-copy .eyebrow{
+    font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--accent);font-weight:600;margin-bottom:8px;
+    text-shadow:0 2px 12px var(--bg);
+  }
+  .intro-copy h2{
+    font-family:'Playfair Display',serif;font-size:clamp(1.4rem,3.4vw,2.4rem);
+    font-weight:700;color:var(--text);max-width:680px;margin:0 auto;line-height:1.25;
+    text-shadow:0 2px 20px var(--bg),0 2px 4px var(--bg);
+  }
+  .intro-copy h2 .hl{color:var(--accent);}
+  .intro-copy h2 .hl-danger{color:var(--danger);}
+  .intro-copy h2 .hl-success{color:var(--success);}
+
+  .scene-toast{
+    position:absolute;left:50%;bottom:9%;transform:translate(-50%,12px);
+    display:flex;align-items:center;gap:10px;
+    background:var(--surface);border:1px solid var(--border2);border-radius:14px;
+    padding:12px 18px;box-shadow:0 16px 40px rgba(0,0,0,.5);
+    opacity:0;z-index:40;max-width:90vw;transition:opacity .35s,transform .35s;
+  }
+  .scene-toast.show{opacity:1;transform:translate(-50%,0);}
+  .scene-toast .st-icon{font-size:22px;flex-shrink:0;}
+  .scene-toast .st-title{font-weight:700;font-size:.88rem;}
+  .scene-toast .st-sub{font-size:.76rem;color:var(--muted);}
+  .scene-toast.danger{border-left:4px solid var(--danger);}
+  .scene-toast.success{border-left:4px solid var(--success);}
+
+  .scroll-cue{
+    position:absolute;bottom:5%;left:50%;transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+    color:var(--muted);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;
+    z-index:30;opacity:1;transition:opacity .3s;
+  }
+  .scroll-cue .chev{font-size:18px;animation:bob 1.6s ease-in-out infinite;}
+  @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(6px);}}
+
+  .intro-loading{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    z-index:50;color:var(--muted);font-size:.85rem;background:var(--bg);
+    transition:opacity .4s;
+  }
+
+  @media(max-width:700px){
+    .intro-scene{height:340vh;}
+  }
+  @media(prefers-reduced-motion:reduce){
+    .intro-scene{height:auto;min-height:60vh;}
+    .intro-stage{position:relative;height:60vh;}
+  }
+
+
+  /* ============================================================
+     PROFESSIONAL DASHBOARD BODY
+     ============================================================ */
+  .dash-hero{
+    display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
+    flex-wrap:wrap;margin-bottom:24px;
+  }
+  .dash-hero h1{font-family:'Playfair Display',serif;font-size:1.9rem;font-weight:700;}
+  .dash-hero p{color:var(--muted);margin-top:4px;font-size:.92rem;}
+  .dash-date-chip{
+    background:var(--surface2);border:1px solid var(--border);border-radius:12px;
+    padding:8px 16px;font-size:.8rem;color:var(--text2);display:flex;align-items:center;gap:8px;
+  }
+
+  .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:22px;}
+  .kpi-card{
+    position:relative;background:var(--surface);border:1px solid var(--border);
+    border-radius:16px;padding:18px 18px 16px;box-shadow:var(--card-shadow);
+    display:flex;flex-direction:column;gap:10px;transition:.2s;overflow:hidden;
+  }
+  .kpi-card:hover{transform:translateY(-2px);border-color:var(--accent);}
+  .kpi-top{display:flex;align-items:center;justify-content:space-between;}
+  .kpi-icon{
+    width:38px;height:38px;border-radius:10px;display:flex;align-items:center;
+    justify-content:center;font-size:18px;flex-shrink:0;
+  }
+  .kpi-icon.c-accent{background:rgba(0,212,170,.12);color:var(--accent);}
+  .kpi-icon.c-danger{background:rgba(255,77,109,.12);color:var(--danger);}
+  .kpi-icon.c-warn{background:rgba(255,183,3,.12);color:var(--warn);}
+  .kpi-icon.c-info{background:rgba(56,189,248,.12);color:var(--info);}
+  .kpi-icon.c-muted{background:var(--surface2);color:var(--muted);}
+  .kpi-trend{font-size:.72rem;font-weight:600;padding:3px 8px;border-radius:8px;}
+  .kpi-trend.up{background:rgba(34,197,94,.12);color:var(--success);}
+  .kpi-trend.down{background:rgba(255,77,109,.12);color:var(--danger);}
+  .kpi-trend.flat{background:var(--surface2);color:var(--muted);}
+  .kpi-val{font-family:'Playfair Display',serif;font-size:1.9rem;font-weight:700;line-height:1;}
+  .kpi-lbl{font-size:.8rem;color:var(--muted);}
+
+  .dash-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;margin-bottom:20px;align-items:start;}
+
+  .quick-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px;}
+  .qa-btn{
+    display:flex;flex-direction:column;align-items:center;gap:8px;
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:16px 10px;text-decoration:none;color:var(--text);transition:.2s;
+    box-shadow:var(--card-shadow);
+  }
+  .qa-btn:hover{border-color:var(--accent);transform:translateY(-2px);}
+  .qa-icon{
+    width:42px;height:42px;border-radius:12px;background:var(--grad);
+    display:flex;align-items:center;justify-content:center;font-size:19px;color:#fff;
+  }
+  .qa-label{font-size:.78rem;font-weight:600;text-align:center;}
+
+  .revenue-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+  .rev-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:16px 18px;box-shadow:var(--card-shadow);
+  }
+  .rev-card .rev-lbl{font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+  .rev-card .rev-val{font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:700;}
+  .rev-card .rev-sub{font-size:.76rem;color:var(--muted);margin-top:4px;}
+
+  @media(max-width:1100px){
+    .kpi-grid{grid-template-columns:repeat(3,1fr);}
+    .dash-grid{grid-template-columns:1fr;}
+    .quick-actions{grid-template-columns:repeat(4,1fr);}
+    .revenue-strip{grid-template-columns:repeat(2,1fr);}
+  }
+  @media(max-width:700px){
+    .kpi-grid{grid-template-columns:repeat(2,1fr);}
+    .quick-actions{grid-template-columns:repeat(2,1fr);}
+    .revenue-strip{grid-template-columns:repeat(2,1fr);}
+    .dash-hero{align-items:flex-start;}
+    .kpi-val{font-size:1.5rem;}
+  }
+  @media(max-width:420px){
+    .kpi-grid{grid-template-columns:1fr 1fr;}
+  }
+</style>
 </head>
 <body>
 <!-- NAVBAR -->
 <nav class="navbar">
   <a href="dashboard.html" class="navbar-brand">
     <div class="brand-icon">&#128138;</div>
-    <span>Rukmini Pharmacy</span>
+    <span>Pooja Pharmacy</span>
   </a>
     <div class="navbar-nav">
     <a href="dashboard.html" class="nav-link active">&#127968; <span class="nav-text">Home</span></a>
     <a href="add-stock.html" class="nav-link">&#10133; <span class="nav-text">Add Stock</span></a>
     <a href="view-stock.html" class="nav-link">&#128230; <span class="nav-text">View Stock</span></a>
-    <a href="sort-stock.html" class="nav-link">&#8964; <span class="nav-text">Sort Stock</span></a>
     <a href="billing.html" class="nav-link">&#128451; <span class="nav-text">Bill Generation</span></a>
     <a href="stock-sale.html" class="nav-link">&#128200; <span class="nav-text">Stock Sale</span></a>
     <a href="scan-stock.html" class="nav-link">&#128247; <span class="nav-text">Scan Stock</span></a>
@@ -40,42 +197,90 @@
   </div>
 </div>
 
+<!-- ============================================================
+     INTRO SCENE — Three.js WebGL 3D rack story, scroll-driven
+     ============================================================ -->
+<section class="intro-scene" id="intro-scene">
+  <div class="intro-stage" id="intro-stage">
+    <div class="intro-loading" id="intro-loading">Loading 3D scene…</div>
+    <canvas id="intro-canvas"></canvas>
+    <div class="intro-vignette"></div>
+
+    <div class="intro-copy">
+      <div class="eyebrow">Pooja Pharmacy · Live Stock Flow</div>
+      <h2 id="intro-headline">Every strip finds its <span class="hl">shelf</span> — automatically.</h2>
+    </div>
+
+    <div class="scene-toast danger" id="toast-low">
+      <span class="st-icon">⚠️</span>
+      <div>
+        <div class="st-title">Low stock — Insulin</div>
+        <div class="st-sub">Only 3 vials left · alert sent to admin</div>
+      </div>
+    </div>
+    <div class="scene-toast success" id="toast-ok">
+      <span class="st-icon">✅</span>
+      <div>
+        <div class="st-title">Stock received — Insulin</div>
+        <div class="st-sub">+50 vials added · shelf back to healthy</div>
+      </div>
+    </div>
+
+    <div class="scroll-cue" id="scroll-cue">
+      <span>Scroll</span><span class="chev">⌄</span>
+    </div>
+  </div>
+</section>
+
 <div class="page">
 <div class="container">
 
   <!-- Header -->
-  <div class="page-header">
-    <h1>Dashboard</h1>
-    <p id="greeting"></p>
+  <div class="dash-hero">
+    <div>
+      <h1 id="greeting-title">Dashboard</h1>
+      <p id="greeting"></p>
+    </div>
+    <div class="dash-date-chip">📅 <span id="today-date"></span></div>
   </div>
   <div id="dashboard-sync-banner"></div>
 
-  <!-- Stats row -->
-  <div class="stat-grid" id="stat-grid"></div>
-
-  <!-- Profit Summary Row -->
-  <div class="stat-grid" id="profit-grid" style="margin-top:0;margin-bottom:0;"></div>
-
-  <!-- Alerts Section -->
-  <div class="card" style="margin-bottom:24px;">
-    <div class="card-header">
-      <span class="card-title">⚠️ Active Alerts</span>
-      <button class="btn btn-sm btn-secondary" onclick="refreshAlerts()">Refresh</button>
-    </div>
-    <div class="card-body" id="alert-list">
-      <div class="empty-state"><div class="empty-icon">✅</div><p>All clear — no alerts right now!</p></div>
-    </div>
+  <!-- Quick actions -->
+  <div class="quick-actions">
+    <a href="add-stock.html" class="qa-btn"><div class="qa-icon">➕</div><div class="qa-label">Add Stock</div></a>
+    <a href="billing.html" class="qa-btn"><div class="qa-icon">🧾</div><div class="qa-label">New Bill</div></a>
+    <a href="scan-stock.html" class="qa-btn"><div class="qa-icon">📷</div><div class="qa-label">Scan Stock</div></a>
+    <a href="alerts.html" class="qa-btn"><div class="qa-icon">🔔</div><div class="qa-label">View Alerts</div></a>
   </div>
 
-  <!-- Recent stock -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">📦 Recent Stock Entries</span>
-      <a href="view-stock.html" class="btn btn-sm btn-secondary">View All →</a>
+  <!-- KPI Stats row -->
+  <div class="kpi-grid" id="stat-grid"></div>
+
+  <!-- Revenue / Profit strip -->
+  <div class="revenue-strip" id="profit-grid"></div>
+
+  <div class="dash-grid">
+    <!-- Recent stock -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📦 Recent Stock Entries</span>
+        <a href="view-stock.html" class="btn btn-sm btn-secondary">View All →</a>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap" id="recent-table-wrap">
+          <div class="empty-state"><div class="empty-icon">📭</div><p>No stock entries yet.</p></div>
+        </div>
+      </div>
     </div>
-    <div class="card-body">
-      <div class="table-wrap" id="recent-table-wrap">
-        <div class="empty-state"><div class="empty-icon">📭</div><p>No stock entries yet.</p></div>
+
+    <!-- Alerts Section -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">⚠️ Active Alerts</span>
+        <button class="btn btn-sm btn-secondary" onclick="refreshAlerts()">Refresh</button>
+      </div>
+      <div class="card-body" id="alert-list">
+        <div class="empty-state"><div class="empty-icon">✅</div><p>All clear — no alerts right now!</p></div>
       </div>
     </div>
   </div>
@@ -100,7 +305,8 @@ document.getElementById('theme-btn').innerHTML=RP.getTheme()==='dark'?'&#127769;
 const hr=new Date().getHours();
 document.getElementById('greeting').textContent=
   (hr<12?'Good Morning ☀️':hr<17?'Good Afternoon 🌤️':'Good Evening 🌙')+
-  ', Pharmacy Manager! Here\'s your daily overview.';
+  ', here\'s what\'s happening at the pharmacy today.';
+document.getElementById('today-date').textContent=new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
 
 function buildStats(){
   const stock=RP.getStock();
@@ -109,30 +315,30 @@ function buildStats(){
   const low=stock.filter(s=>parseInt(s.quantity)<=RP.LOW_STOCK&&parseInt(s.quantity)>0).length;
   const out=stock.filter(s=>parseInt(s.quantity)===0).length;
   document.getElementById('stat-grid').innerHTML=`
-    <div class="stat-card">
-      <div class="stat-icon">📦</div>
-      <div class="stat-val accent">${stock.length}</div>
-      <div class="stat-lbl">Total Products</div>
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-icon c-accent">📦</div><span class="kpi-trend flat">Live</span></div>
+      <div class="kpi-val">${stock.length}</div>
+      <div class="kpi-lbl">Total Products</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-icon">🔴</div>
-      <div class="stat-val" style="color:var(--danger)">${low}</div>
-      <div class="stat-lbl">Low Stock Items</div>
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-icon c-danger">🔻</div>${low?'<span class="kpi-trend down">Watch</span>':'<span class="kpi-trend up">Good</span>'}</div>
+      <div class="kpi-val" style="color:var(--danger)">${low}</div>
+      <div class="kpi-lbl">Low Stock Items</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-icon">⛔</div>
-      <div class="stat-val" style="color:var(--muted)">${out}</div>
-      <div class="stat-lbl">Out of Stock</div>
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-icon c-muted">⛔</div>${out?'<span class="kpi-trend down">Action</span>':'<span class="kpi-trend up">Good</span>'}</div>
+      <div class="kpi-val" style="color:var(--muted)">${out}</div>
+      <div class="kpi-lbl">Out of Stock</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-icon">🧾</div>
-      <div class="stat-val accent">${bills.length}</div>
-      <div class="stat-lbl">Bills Generated</div>
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-icon c-info">🧾</div><span class="kpi-trend flat">Total</span></div>
+      <div class="kpi-val">${bills.length}</div>
+      <div class="kpi-lbl">Bills Generated</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-icon">🔔</div>
-      <div class="stat-val" style="color:var(--warn)">${alerts.length}</div>
-      <div class="stat-lbl">Active Alerts</div>
+    <div class="kpi-card">
+      <div class="kpi-top"><div class="kpi-icon c-warn">🔔</div>${alerts.length?'<span class="kpi-trend down">Review</span>':'<span class="kpi-trend up">Clear</span>'}</div>
+      <div class="kpi-val" style="color:var(--warn)">${alerts.length}</div>
+      <div class="kpi-lbl">Active Alerts</div>
     </div>
   `;
 }
@@ -252,25 +458,25 @@ function buildProfitGrid(){
   var totalRev= allSales.reduce(function(s,x){return s+(x.totalSelling||0);},0);
   function pc(v){ return v>0?'var(--success)':v<0?'var(--danger)':'var(--muted)'; }
   document.getElementById('profit-grid').innerHTML=
-    '<div class="stat-card">'+
-      '<div class="stat-icon" style="font-size:18px;">Today Profit</div>'+
-      '<div class="stat-val" style="color:'+pc(todayP)+';">Rs.'+todayP.toFixed(2)+'</div>'+
-      '<div class="stat-lbl">'+today.length+' sale(s)</div>'+
+    '<div class="rev-card">'+
+      '<div class="rev-lbl">Today Profit</div>'+
+      '<div class="rev-val" style="color:'+pc(todayP)+';">₹'+todayP.toFixed(2)+'</div>'+
+      '<div class="rev-sub">'+today.length+' sale(s) today</div>'+
     '</div>'+
-    '<div class="stat-card">'+
-      '<div class="stat-icon" style="font-size:18px;">Overall Profit</div>'+
-      '<div class="stat-val" style="color:'+pc(overallP)+';">Rs.'+overallP.toFixed(2)+'</div>'+
-      '<div class="stat-lbl">'+allSales.length+' total sale(s)</div>'+
+    '<div class="rev-card">'+
+      '<div class="rev-lbl">Overall Profit</div>'+
+      '<div class="rev-val" style="color:'+pc(overallP)+';">₹'+overallP.toFixed(2)+'</div>'+
+      '<div class="rev-sub">'+allSales.length+' total sale(s)</div>'+
     '</div>'+
-    '<div class="stat-card">'+
-      '<div class="stat-icon" style="font-size:18px;">Today Revenue</div>'+
-      '<div class="stat-val accent">Rs.'+todayRev.toFixed(2)+'</div>'+
-      '<div class="stat-lbl">From stock sales</div>'+
+    '<div class="rev-card">'+
+      '<div class="rev-lbl">Today Revenue</div>'+
+      '<div class="rev-val accent">₹'+todayRev.toFixed(2)+'</div>'+
+      '<div class="rev-sub">From stock sales</div>'+
     '</div>'+
-    '<div class="stat-card">'+
-      '<div class="stat-icon" style="font-size:18px;">Total Revenue</div>'+
-      '<div class="stat-val accent">Rs.'+totalRev.toFixed(2)+'</div>'+
-      '<div class="stat-lbl">All time</div>'+
+    '<div class="rev-card">'+
+      '<div class="rev-lbl">Total Revenue</div>'+
+      '<div class="rev-val accent">₹'+totalRev.toFixed(2)+'</div>'+
+      '<div class="rev-sub">All time</div>'+
     '</div>';
 }
 
@@ -279,6 +485,425 @@ buildProfitGrid();
 refreshAlerts();
 buildRecentTable();
 setTimeout(showAutoPopups, 800);
+</script>
+
+<script>
+// ============================================================
+// INTRO SCENE — real WebGL 3D scene (Three.js), driven by scroll
+// Geometry: BoxGeometry racks, CylinderGeometry bottles,
+// BoxGeometry tablet strips with embossed blister bumps,
+// canvas-drawn label textures (generic, no real brand/photo).
+// ============================================================
+(function(){
+  var loadingEl = document.getElementById('intro-loading');
+
+  // Hard safety net: no matter what happens below (CDN blocked, slow network,
+  // an exception mid-setup), never leave the loading overlay stuck forever.
+  function dismissLoading(message){
+    if(!loadingEl) return;
+    if(message) loadingEl.textContent = message;
+    loadingEl.style.opacity = '0';
+    setTimeout(function(){ loadingEl.style.display='none'; }, 400);
+  }
+  var safetyTimer = setTimeout(function(){
+    dismissLoading('3D preview unavailable — continue scrolling for the dashboard.');
+  }, 6000);
+
+  if(typeof THREE==='undefined'){
+    clearTimeout(safetyTimer);
+    dismissLoading('3D preview unavailable — continue scrolling for the dashboard.');
+    return;
+  }
+
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var stageEl = document.getElementById('intro-stage');
+  var canvas  = document.getElementById('intro-canvas');
+  var headline  = document.getElementById('intro-headline');
+  var toastLow  = document.getElementById('toast-low');
+  var toastOk   = document.getElementById('toast-ok');
+  var cue       = document.getElementById('scroll-cue');
+
+  if(reduceMotion){
+    clearTimeout(safetyTimer);
+    dismissLoading();
+    return;
+  }
+
+  try{
+
+  // ---------- renderer / scene / camera ----------
+  var renderer = new THREE.WebGLRenderer({ canvas:canvas, antialias:true, alpha:true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  var scene = new THREE.Scene();
+
+  var camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.set(0, -0.8, 8.5);
+  camera.lookAt(0, 0.2, 0);
+
+  // ---------- lighting ----------
+  var ambient = new THREE.AmbientLight(0xffffff, 0.55);
+  scene.add(ambient);
+
+  var keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
+  keyLight.position.set(5, 8, 6);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(1024,1024);
+  keyLight.shadow.camera.near = 1;
+  keyLight.shadow.camera.far = 30;
+  keyLight.shadow.camera.left = -10;
+  keyLight.shadow.camera.right = 10;
+  keyLight.shadow.camera.top = 10;
+  keyLight.shadow.camera.bottom = -10;
+  scene.add(keyLight);
+
+  var fillLight = new THREE.DirectionalLight(0x6fb8ff, 0.35);
+  fillLight.position.set(-6, 3, -4);
+  scene.add(fillLight);
+
+  var rimLight = new THREE.PointLight(0x00d4aa, 0.6, 20);
+  rimLight.position.set(0, 2, 4);
+  scene.add(rimLight);
+
+  // ---------- ground (shadow catcher) ----------
+  var groundMat = new THREE.ShadowMaterial({ opacity: 0.28 });
+  var ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40), groundMat);
+  ground.rotation.x = -Math.PI/2;
+  ground.position.y = -2.85;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // ---------- rack frame group ----------
+  var rackGroup = new THREE.Group();
+  scene.add(rackGroup);
+
+  var frameMat = new THREE.MeshStandardMaterial({ color:0x2a3a52, roughness:0.6, metalness:0.35 });
+  var shelfMat = new THREE.MeshStandardMaterial({ color:0x3a4d68, roughness:0.55, metalness:0.3 });
+
+  var SHELF_Y = [-1.5, 0, 1.5];
+  var SLOT_X  = [-3, -1, 1, 3];
+  var RACK_DEPTH = 1.1;
+  var RACK_WIDTH = 8.4;
+
+  // verticals
+  [-4.1, 4.1].forEach(function(x){
+    var post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 4.2, 0.14), frameMat);
+    post.position.set(x, 0, -RACK_DEPTH/2);
+    post.castShadow = true;
+    rackGroup.add(post);
+    var postBack = post.clone();
+    postBack.position.z = RACK_DEPTH/2;
+    rackGroup.add(postBack);
+  });
+
+  // shelves
+  SHELF_Y.forEach(function(y){
+    var shelf = new THREE.Mesh(new THREE.BoxGeometry(RACK_WIDTH, 0.08, RACK_DEPTH), shelfMat);
+    shelf.position.set(0, y - 0.45, 0);
+    shelf.castShadow = true;
+    shelf.receiveShadow = true;
+    rackGroup.add(shelf);
+  });
+  // base shelf (bottom)
+  var baseShelf = new THREE.Mesh(new THREE.BoxGeometry(RACK_WIDTH, 0.08, RACK_DEPTH), shelfMat);
+  baseShelf.position.set(0, -2.4, 0);
+  baseShelf.receiveShadow = true;
+  rackGroup.add(baseShelf);
+
+  // back panel, subtle
+  var backPanel = new THREE.Mesh(
+    new THREE.PlaneGeometry(RACK_WIDTH, 4.6),
+    new THREE.MeshStandardMaterial({ color:0x1a2438, roughness:0.9, metalness:0.1, side:THREE.DoubleSide })
+  );
+  backPanel.position.set(0, -0.2, -RACK_DEPTH/2 - 0.02);
+  backPanel.receiveShadow = true;
+  rackGroup.add(backPanel);
+
+  // ---------- canvas label texture helper ----------
+  // Generic, hand-drawn labels — no real brand/photo, just clean pharma-style iconography.
+  function makeLabelTexture(opts){
+    var w=256,h=160;
+    var c=document.createElement('canvas'); c.width=w; c.height=h;
+    var ctx=c.getContext('2d');
+    ctx.fillStyle = opts.bg; ctx.fillRect(0,0,w,h);
+    // accent stripe
+    ctx.fillStyle = opts.accent;
+    ctx.fillRect(0,0,w,28);
+    // cross icon
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(w/2-3, 6, 6, 16);
+    ctx.fillRect(w/2-8, 11, 16, 6);
+    // name text
+    ctx.fillStyle = opts.text || '#1a2438';
+    ctx.font = '600 22px Arial, sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText(opts.name, w/2, h/2+6);
+    // subtitle
+    ctx.font='400 13px Arial, sans-serif';
+    ctx.fillStyle = opts.sub || '#5a7599';
+    ctx.fillText(opts.kind, w/2, h/2+30);
+    // thin border
+    ctx.strokeStyle='rgba(0,0,0,0.15)'; ctx.lineWidth=2;
+    ctx.strokeRect(1,1,w-2,h-2);
+    var tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  var PALETTE = [
+    { bg:'#ffffff', accent:'#0099ff', text:'#0a2540' },
+    { bg:'#ffffff', accent:'#00d4aa', text:'#0a2540' },
+    { bg:'#ffffff', accent:'#7c3aed', text:'#0a2540' },
+    { bg:'#fff8ec', accent:'#ffb703', text:'#3a2a08' }
+  ];
+
+  var PRODUCT_NAMES = [
+    'Paracetamol','Amoxicillin','Cetrizine','Ibuprofen',
+    'ORS Sachet','Vitamin C','Cough Syrup','Antacid',
+    'Bandage','Insulin','Saline Drip','Multivitamin'
+  ];
+
+  // ---------- product builders ----------
+  function buildTabletStrip(name, palette){
+    var g = new THREE.Group();
+    var bodyMat = new THREE.MeshStandardMaterial({
+      map: makeLabelTexture({ name:name, kind:'Tablets', bg:palette.bg, accent:palette.accent, text:palette.text }),
+      roughness:0.35, metalness:0.05
+    });
+    var sideMat = new THREE.MeshStandardMaterial({ color:0xd8d8d8, roughness:0.3, metalness:0.6 });
+    var body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.9, 0.06), [sideMat,sideMat,sideMat,sideMat,bodyMat,bodyMat]);
+    body.castShadow = true;
+    g.add(body);
+    // blister bumps
+    var bumpMat = new THREE.MeshStandardMaterial({ color:0xc8d8e8, roughness:0.15, metalness:0.1, transparent:true, opacity:0.85 });
+    for(var r=0;r<4;r++){
+      for(var col=0;col<2;col++){
+        var bump = new THREE.Mesh(new THREE.SphereGeometry(0.07,12,8,0,Math.PI*2,0,Math.PI/2), bumpMat);
+        bump.position.set((col-0.5)*0.28, 0.32 - r*0.22, 0.045);
+        bump.rotation.x = Math.PI;
+        g.add(bump);
+      }
+    }
+    return g;
+  }
+
+  function buildBottle(name, palette){
+    var g = new THREE.Group();
+    var bodyMat = new THREE.MeshStandardMaterial({ color:0xeef5fa, roughness:0.15, metalness:0.05, transparent:true, opacity:0.92 });
+    var body = new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.38,0.95,20), bodyMat);
+    body.castShadow = true;
+    g.add(body);
+    var capMat = new THREE.MeshStandardMaterial({ color:0x2a3a52, roughness:0.5, metalness:0.4 });
+    var cap = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.24,0.22,16), capMat);
+    cap.position.y = 0.58;
+    cap.castShadow = true;
+    g.add(cap);
+    var labelMat = new THREE.MeshStandardMaterial({
+      map: makeLabelTexture({ name:name, kind:'Syrup', bg:palette.bg, accent:palette.accent, text:palette.text }),
+      roughness:0.4
+    });
+    var label = new THREE.Mesh(new THREE.CylinderGeometry(0.385,0.385,0.5,20,1,true), labelMat);
+    label.position.y = -0.05;
+    g.add(label);
+    return g;
+  }
+
+  function buildBox(name, palette){
+    var g = new THREE.Group();
+    var sideMat = new THREE.MeshStandardMaterial({ color:palette.bg, roughness:0.6, metalness:0.05 });
+    var faceMat = new THREE.MeshStandardMaterial({
+      map: makeLabelTexture({ name:name, kind:'Capsules', bg:palette.bg, accent:palette.accent, text:palette.text }),
+      roughness:0.55
+    });
+    var box = new THREE.Mesh(new THREE.BoxGeometry(0.72,0.9,0.42), [sideMat,sideMat,sideMat,sideMat,faceMat,sideMat]);
+    box.castShadow = true;
+    g.add(box);
+    return g;
+  }
+
+  var BUILDERS = [buildTabletStrip, buildBottle, buildBox];
+
+  // ---------- slot positions ----------
+  function slotPosition(idx){
+    var shelfIdx = Math.floor(idx/4);
+    var col = idx % 4;
+    return new THREE.Vector3(SLOT_X[col], SHELF_Y[2-shelfIdx] - 0.05, 0.15);
+  }
+
+  var products = []; // { mesh, targetPos, startPos, flown:false }
+  var lowStockIdx = 9; // Insulin slot
+  var lowStockProduct = null;
+  var restockProduct  = null;
+
+  for(var i=0;i<12;i++){
+    var palette = PALETTE[i % PALETTE.length];
+    var builder = BUILDERS[i % BUILDERS.length];
+    var mesh = builder(PRODUCT_NAMES[i], palette);
+    var target = slotPosition(i);
+    var startPos = new THREE.Vector3((Math.random()-0.5)*2, 6.5, 9 + Math.random()*1.5);
+    mesh.position.copy(startPos);
+    mesh.rotation.set(Math.random()*2, Math.random()*2, Math.random()*2);
+    mesh.scale.setScalar(0.001);
+    scene.add(mesh);
+    var entry = { mesh:mesh, target:target, start:startPos, flown:false, idx:i };
+    products.push(entry);
+    if(i===lowStockIdx) lowStockProduct = entry;
+  }
+
+  // restock replacement product (flies in during beat 3)
+  (function(){
+    var palette = PALETTE[1];
+    var mesh = buildBottle('Insulin', palette);
+    var target = slotPosition(lowStockIdx);
+    var start = new THREE.Vector3(2.5, 6.5, 10.5);
+    mesh.position.copy(start);
+    mesh.scale.setScalar(0.001);
+    scene.add(mesh);
+    restockProduct = { mesh:mesh, target:target, start:start, flown:false };
+  })();
+
+  // ---------- sizing ----------
+  function resize(){
+    var w = stageEl.clientWidth, h = stageEl.clientHeight;
+    renderer.setSize(w,h,false);
+    camera.aspect = w/h;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ---------- easing ----------
+  function clamp01(v){ return Math.max(0,Math.min(1,v)); }
+  function easeInOutCubic(t){ return t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
+  function lerpVec(a,b,t,out){
+    out.x = a.x + (b.x-a.x)*t;
+    out.y = a.y + (b.y-a.y)*t;
+    out.z = a.z + (b.z-a.z)*t;
+    return out;
+  }
+
+  // ---------- scroll progress ----------
+  var introSection = document.getElementById('intro-scene');
+  var progress = 0;
+
+  function computeProgress(){
+    var rect = introSection.getBoundingClientRect();
+    var total = rect.height - window.innerHeight;
+    if(total <= 0) return 1;
+    var scrolled = -rect.top;
+    return clamp01(scrolled/total);
+  }
+
+  var tmpVec = new THREE.Vector3();
+  var lowFlagged = false, lowResolved = false, restockFlown = false;
+
+  function applyBeats(p){
+    // Beat 0 (0 - 0.12): camera intro
+    var camT = easeInOutCubic(clamp01(p/0.12));
+    camera.position.y = -0.8 + camT*1.0;
+    camera.position.z = 8.5 - camT*1.0;
+    rackGroup.scale.setScalar(0.001 + 0.999*clamp01(p/0.08));
+
+    // Beat 1 (0.12 - 0.55): products fly in, staggered
+    var flyStart = 0.12, flyEnd = 0.58;
+    products.forEach(function(entry, i){
+      var stagger = i/products.length;
+      var local = clamp01((p - flyStart - stagger*(flyEnd-flyStart-0.18)) / 0.18);
+      var t = easeInOutCubic(local);
+      lerpVec(entry.start, entry.target, t, tmpVec);
+      entry.mesh.position.copy(tmpVec);
+      var scaleT = clamp01(local*1.4);
+      entry.mesh.scale.setScalar(0.001 + 0.999*scaleT);
+      entry.mesh.rotation.y = (1-t)*Math.PI*1.5;
+      entry.mesh.rotation.x *= (1-t);
+      entry.mesh.rotation.z *= (1-t);
+    });
+
+    // Beat 2 (0.6 - 0.74): low stock flag
+    var flagT = clamp01((p-0.60)/0.06);
+    if(flagT>0 && !lowFlagged){
+      lowFlagged = true;
+      headline.innerHTML = 'A slot runs low — <span class="hl hl-danger">instant alert</span> to the admin.';
+      toastLow.classList.add('show');
+    }
+    if(lowStockProduct){
+      var pulse = flagT>0 && flagT<1 ? (Math.sin(p*60)*0.5+0.5) : 0;
+      var mats = lowStockProduct.mesh.material;
+      // remove low-stock item from shelf (sold out) by scaling it down once flagged
+      var removeT = clamp01((p-0.62)/0.05);
+      lowStockProduct.mesh.scale.setScalar(Math.max(0.001, 0.999*(1-removeT)));
+    }
+
+    // Beat 3 (0.76 - 0.92): restock arrives, resolves
+    var restockStart=0.76, restockEnd=0.90;
+    var rT = easeInOutCubic(clamp01((p-restockStart)/(restockEnd-restockStart)));
+    if(restockProduct){
+      lerpVec(restockProduct.start, restockProduct.target, rT, tmpVec);
+      restockProduct.mesh.position.copy(tmpVec);
+      restockProduct.mesh.scale.setScalar(0.001 + 0.999*clamp01(rT*1.3));
+      restockProduct.mesh.rotation.y = (1-rT)*Math.PI*1.2;
+    }
+    if(rT>0.05 && !restockFlown){
+      restockFlown = true;
+      toastLow.classList.remove('show');
+      headline.innerHTML = 'Restocked — shelf is <span class="hl hl-success">healthy</span> again.';
+      toastOk.classList.add('show');
+    }
+    if(p>0.95 && !lowResolved){
+      lowResolved = true;
+      toastOk.classList.remove('show');
+    }
+
+    // final camera settle (0.9 - 1.0): wide establishing shot
+    var settleT = easeInOutCubic(clamp01((p-0.9)/0.1));
+    camera.position.x = settleT*1.2;
+    camera.position.y = 0.2 + settleT*1.4;
+    camera.position.z = 7.5 + settleT*3.5;
+    camera.lookAt(0, 0.1, 0);
+
+    cue.style.opacity = p>0.03 ? '0' : '1';
+  }
+
+  // ---------- render loop ----------
+  var rafId = null;
+  function tick(){
+    try{
+      progress = computeProgress();
+      applyBeats(progress);
+      rimLight.intensity = 0.5 + Math.sin(Date.now()*0.0015)*0.1;
+      renderer.render(scene, camera);
+      rafId = requestAnimationFrame(tick);
+    }catch(err){
+      if(rafId) cancelAnimationFrame(rafId);
+      dismissLoading('3D preview unavailable — continue scrolling for the dashboard.');
+      if(window.console && console.error) console.error('Intro scene render error:', err);
+    }
+  }
+
+  function start(){
+    clearTimeout(safetyTimer);
+    dismissLoading();
+    if(!rafId) tick();
+  }
+
+  // give the browser a tick to lay out the canvas before sizing/starting
+  requestAnimationFrame(function(){
+    resize();
+    start();
+  });
+
+  window.addEventListener('beforeunload', function(){
+    if(rafId) cancelAnimationFrame(rafId);
+  });
+
+  }catch(err){
+    clearTimeout(safetyTimer);
+    dismissLoading('3D preview unavailable — continue scrolling for the dashboard.');
+    if(window.console && console.error) console.error('Intro scene error:', err);
+  }
+})();
 </script>
 </body>
 </html>
