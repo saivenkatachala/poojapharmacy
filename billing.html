@@ -20,6 +20,11 @@
     .bill-item-row{grid-template-columns:1fr 1fr;gap:8px;}
     .bill-item-row .med-sel-wrap{grid-column:1/-1;}
   }
+  .sell-as-select{
+    display:none;margin-top:6px;width:100%;
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:.8rem;
+  }
   .remove-btn{
     background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.25);
     color:var(--danger);border-radius:8px;cursor:pointer;
@@ -194,7 +199,7 @@
           <div style="display:grid;grid-template-columns:2fr 80px 110px 34px;gap:10px;
             padding:0 0 8px;font-size:.71rem;font-weight:600;color:var(--muted);
             text-transform:uppercase;letter-spacing:.06em;">
-            <span>Medicine (MRP auto-filled)</span>
+            <span>Medicine (MRP auto-filled, Sell As shown if strip-based)</span>
             <span>Qty</span>
             <span>Unit Price (Rs)</span>
             <span></span>
@@ -286,13 +291,17 @@ var currentBillData=null;
 /* ---- Medicine dropdown options ---- */
 function getMedOptions(){
   return RP.getStock()
-    .filter(function(s){ return parseInt(s.quantity)>0; })
+    .filter(function(s){ return parseFloat(s.quantity)>0; })
     .map(function(s){
       var mrp=parseFloat(s.mrp||s.mrpPerUnit||0);
       var cost=parseFloat(s.costPrice||s.costPricePerUnit||0);
+      var tps=parseFloat(s.tabletsPerStrip||0);
+      var mrpTablet=parseFloat(s.mrpPerTablet||(tps>0?mrp/tps:0));
+      var costTablet=parseFloat(s.costPerTablet||(tps>0?cost/tps:0));
       var label=s.name+(s.brand?' ('+s.brand+')':'')+
         ' — '+s.quantity+' '+s.qtyType+
-        (mrp>0?' | MRP:Rs.'+mrp.toFixed(2):'');
+        (mrp>0?' | MRP:Rs.'+mrp.toFixed(2):'')+
+        (tps>0?' | '+tps+'/strip':'');
       return '<option value="'+s.id+'"'+
         ' data-name="'+esc(s.name)+'"'+
         ' data-brand="'+esc(s.brand||'')+'"'+
@@ -300,7 +309,10 @@ function getMedOptions(){
         ' data-qty="'+s.quantity+'"'+
         ' data-qtytype="'+esc(s.qtyType)+'"'+
         ' data-mrp="'+mrp+'"'+
-        ' data-cost="'+cost+'">'+
+        ' data-cost="'+cost+'"'+
+        ' data-tps="'+tps+'"'+
+        ' data-mrp-tablet="'+mrpTablet+'"'+
+        ' data-cost-tablet="'+costTablet+'">'+
         label+'</option>';
     }).join('');
 }
@@ -319,6 +331,10 @@ function addBillRow(){
       '<select onchange="onMedSelect(this)" style="font-size:.85rem;padding:9px 10px;">'+
         '<option value="">-- Select Medicine --</option>'+opts+
       '</select>'+
+      '<select class="sell-as-select" onchange="onSellAsChange(this)">'+
+        '<option value="strip">Sell as Strip</option>'+
+        '<option value="tablet">Sell as Tablet</option>'+
+      '</select>'+
     '</div>'+
     '<div class="field" style="min-width:0;">'+
       '<input type="number" min="1" value="" placeholder="0"'+
@@ -329,25 +345,62 @@ function addBillRow(){
         ' oninput="updateTotals()" style="font-size:.85rem;padding:9px 10px;"/>'+
     '</div>'+
     '<button class="remove-btn" onclick="removeRow(\''+id+'\')" title="Remove">&#10005;</button>';
+  div.dataset.sellAs='strip';
   document.getElementById('bill-items-area').appendChild(div);
   updateTotals();
 }
 
-/* ---- When medicine is selected — auto-fill MRP ---- */
+/* ---- When medicine is selected — show/hide "Sell As" and auto-fill price ---- */
 function onMedSelect(sel){
-  var opt=sel.selectedOptions[0];
-  if(!opt||!opt.value) return;
   var row=sel.closest('.bill-item-row');
+  var sellAsSel=row.querySelector('.sell-as-select');
+  var opt=sel.selectedOptions[0];
+  if(!opt||!opt.value){
+    sellAsSel.style.display='none';
+    return;
+  }
+  var tps=parseFloat(opt.getAttribute('data-tps'))||0;
+  if(tps>0){
+    sellAsSel.style.display='block';
+    sellAsSel.value='strip';
+  } else {
+    sellAsSel.style.display='none';
+  }
+  applySellUnit(row);
+}
+
+/* ---- When "Sell As" (Strip/Tablet) changes ---- */
+function onSellAsChange(sel){
+  var row=sel.closest('.bill-item-row');
+  applySellUnit(row);
+}
+
+/* ---- Apply the chosen selling unit: sets max qty + auto-fills unit price ---- */
+function applySellUnit(row){
+  var medSel=row.querySelector('select:not(.sell-as-select)');
+  var opt=medSel.selectedOptions[0];
+  if(!opt||!opt.value) return;
+  var sellAsSel=row.querySelector('.sell-as-select');
+  var sellAs=(sellAsSel&&sellAsSel.style.display!=='none')?sellAsSel.value:'strip';
   var inputs=row.querySelectorAll('input[type="number"]');
   var qtyInput=inputs[0];
   var priceInput=inputs[1];
-  var availQty=parseInt(opt.getAttribute('data-qty'))||0;
-  var mrp=parseFloat(opt.getAttribute('data-mrp'))||0;
-  // Enforce max
-  qtyInput.max=availQty;
-  qtyInput.title='Max: '+availQty+' '+opt.getAttribute('data-qtytype');
-  // Auto-fill MRP as unit price
-  if(mrp>0) priceInput.value=mrp.toFixed(2);
+  var tps=parseFloat(opt.getAttribute('data-tps'))||0;
+  var availStrips=parseFloat(opt.getAttribute('data-qty'))||0;
+  var mrpStrip=parseFloat(opt.getAttribute('data-mrp'))||0;
+  var mrpTablet=parseFloat(opt.getAttribute('data-mrp-tablet'))||0;
+
+  if(sellAs==='tablet'&&tps>0){
+    var availTablets=Math.floor(availStrips*tps);
+    qtyInput.max=availTablets;
+    qtyInput.title='Max: '+availTablets+' tablets';
+    priceInput.value=(mrpTablet>0?mrpTablet:(tps>0?mrpStrip/tps:0)).toFixed(2);
+  } else {
+    qtyInput.max=availStrips;
+    qtyInput.title='Max: '+availStrips+' '+opt.getAttribute('data-qtytype');
+    priceInput.value=mrpStrip>0?mrpStrip.toFixed(2):'';
+  }
+  row.dataset.sellAs=sellAs;
   updateTotals();
 }
 
@@ -369,7 +422,7 @@ function removeRow(id){
 function updateTotals(){
   var total=0, profit=0, count=0;
   document.querySelectorAll('.bill-item-row').forEach(function(row){
-    var sel=row.querySelector('select');
+    var sel=row.querySelector('select:not(.sell-as-select)');
     var inputs=row.querySelectorAll('input[type="number"]');
     var qty=parseFloat(inputs[0]?inputs[0].value:0)||0;
     var price=parseFloat(inputs[1]?inputs[1].value:0)||0;
@@ -377,8 +430,13 @@ function updateTotals(){
       count++;
       var lineTotal=qty*price;
       total+=lineTotal;
-      // Profit = (selling price - cost price) * qty
-      var costPerUnit=parseFloat(sel.selectedOptions[0]?sel.selectedOptions[0].getAttribute('data-cost'):0)||0;
+      // Profit = (selling price - cost price) * qty — cost basis depends on Sell As (strip/tablet)
+      var opt=sel.selectedOptions[0];
+      var tps=parseFloat(opt.getAttribute('data-tps'))||0;
+      var sellAs=row.dataset.sellAs||'strip';
+      var costPerUnit=(sellAs==='tablet'&&tps>0)?
+        parseFloat(opt.getAttribute('data-cost-tablet'))||0 :
+        parseFloat(opt.getAttribute('data-cost'))||0;
       profit+=(price-costPerUnit)*qty;
     }
   });
@@ -394,22 +452,35 @@ function updateTotals(){
 function getBillItems(){
   var items=[];
   document.querySelectorAll('.bill-item-row').forEach(function(row){
-    var sel=row.querySelector('select');
+    var sel=row.querySelector('select:not(.sell-as-select)');
     var inputs=row.querySelectorAll('input[type="number"]');
     var qty=parseFloat(inputs[0]?inputs[0].value:0)||0;
     var price=parseFloat(inputs[1]?inputs[1].value:0)||0;
     if(!sel||!sel.value||qty<=0) return;
     var opt=sel.selectedOptions[0];
-    var costPerUnit=parseFloat(opt?opt.getAttribute('data-cost'):0)||0;
+    var tps=parseFloat(opt?opt.getAttribute('data-tps'):0)||0;
+    var sellAs=row.dataset.sellAs||'strip';
+    var costPerUnit, unitLabel, stockDeduct;
+    if(sellAs==='tablet'&&tps>0){
+      costPerUnit=parseFloat(opt.getAttribute('data-cost-tablet'))||0;
+      unitLabel='Tablets';
+      stockDeduct=qty/tps;               // fraction of a strip
+    } else {
+      costPerUnit=parseFloat(opt?opt.getAttribute('data-cost'):0)||0;
+      unitLabel=opt?opt.getAttribute('data-qtytype'):'';
+      stockDeduct=qty;
+    }
     items.push({
       medId:    sel.value,
       qty:      qty,
+      soldAs:   sellAs,
+      stockDeduct: stockDeduct,          // amount to subtract from stock (in stock's native qtyType units)
       cost:     price,      // selling price (MRP based) used for bill total
       subtotal: parseFloat((qty*price).toFixed(2)),
       medName:  opt?opt.getAttribute('data-name'):'',
       medBrand: opt?opt.getAttribute('data-brand'):'',
       medType:  opt?opt.getAttribute('data-type'):'',
-      qtyType:  opt?opt.getAttribute('data-qtytype'):'',
+      qtyType:  unitLabel,
       // Cost price (for profit only — not shown on bill)
       costPricePerUnit: costPerUnit,
       profitOnLine: parseFloat(((price-costPerUnit)*qty).toFixed(2))
@@ -460,12 +531,13 @@ function submitBill(){
   bills.push(bill);
   RP.saveBills(bills);
 
-  // ── 2. Deduct stock ──
+  // ── 2. Deduct stock (handles fractional strip deduction when sold as loose tablets) ──
   var stock=RP.getStock();
   items.forEach(function(item){
     var idx=stock.findIndex(function(s){return s.id===item.medId;});
     if(idx!==-1){
-      stock[idx].quantity=Math.max(0,(parseInt(stock[idx].quantity)||0)-item.qty);
+      var deduct=(item.stockDeduct!==undefined)?item.stockDeduct:item.qty;
+      stock[idx].quantity=Math.max(0,parseFloat(((parseFloat(stock[idx].quantity)||0)-deduct).toFixed(3)));
     }
   });
   RP.saveStock(stock);

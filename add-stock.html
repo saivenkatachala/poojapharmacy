@@ -31,6 +31,7 @@
   .pr-val.green{color:var(--success);}
   .pr-val.blue{color:var(--accent2);}
   .pr-val.orange{color:var(--warn);}
+  .pr-val.purple{color:#a855f7;}
 
   .strip-info{
     background:rgba(0,153,255,.08);border:1px solid rgba(0,153,255,.2);
@@ -38,14 +39,19 @@
     margin-top:6px;display:none;
   }
   .hint{font-size:.76rem;color:var(--muted);margin-top:4px;}
-  .tab-switcher{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;}
-  .tab-btn{
-    flex:1;padding:11px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;
-    font-size:.88rem;font-weight:600;background:var(--surface2);color:var(--text2);transition:.2s;
+
+  .gst-box{
+    grid-column:1/-1;
+    background:rgba(168,85,247,.07);border:1px solid rgba(168,85,247,.22);
+    border-radius:10px;padding:12px 16px;display:flex;gap:20px;flex-wrap:wrap;align-items:center;
   }
-  .tab-btn.active{background:var(--accent);color:#fff;}
-  .tab-panel{display:none;}
-  .tab-panel.active{display:block;}
+  .gst-box .pr-val{color:#a855f7;}
+
+  .batch-box{
+    grid-column:1/-1;
+    background:rgba(0,153,255,.06);border:1px solid rgba(0,153,255,.2);
+    border-radius:10px;padding:12px 16px;display:flex;gap:24px;flex-wrap:wrap;align-items:center;
+  }
 </style>
 </head>
 <body>
@@ -93,198 +99,189 @@
 <div class="container">
   <div class="page-header">
     <h1>Add Stock</h1>
-    <p>Add new medicine inventory with pricing details for profit tracking.</p>
+    <p>Add new medicine inventory with GST-aware pricing details for accurate profit tracking.</p>
   </div>
 
   <div id="add-sync-banner"></div>
 
-  <!-- Tab switcher: Quick Entry vs Detailed -->
-  <div class="tab-switcher">
-    <button class="tab-btn active" onclick="switchTab('basic')">Basic Entry</button>
-    <button class="tab-btn" onclick="switchTab('detailed')">Detailed Entry (with Pricing)</button>
-  </div>
+  <!-- ===== STOCK ENTRY (with Pricing + GST) ===== -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">New Stock Entry with Pricing</span></div>
+    <div class="card-body">
 
-  <!-- ===== BASIC TAB ===== -->
-  <div class="tab-panel active" id="tab-basic">
-    <div class="card">
-      <div class="card-header"><span class="card-title">New Stock Entry</span></div>
-      <div class="card-body">
-        <div class="form-grid form-grid-2">
-          <div class="field">
-            <label>Type of Medicine *</label>
-            <select id="b-medType" required></select>
-          </div>
-          <div class="field">
-            <label>Name of Medicine *</label>
-            <input type="text" id="b-medName" placeholder="e.g. Paracetamol 500mg"/>
-          </div>
-          <div class="field">
-            <label>Brand Name</label>
-            <input type="text" id="b-brandName" placeholder="e.g. Calpol, Dolo"/>
-          </div>
-          <div class="field">
-            <label>Quantity Type *</label>
-            <select id="b-qtyType" onchange="onBasicQtyTypeChange()" required></select>
-          </div>
-          <div class="field">
-            <label>Stock Available *</label>
-            <input type="number" id="b-quantity" min="0" placeholder="Number of units"/>
-          </div>
-          <div class="field">
-            <label>Expiry Date *</label>
-            <input type="date" id="b-expiry"/>
-          </div>
-          <div class="field" style="grid-column:1/-1;">
-            <label>Notes</label>
-            <input type="text" id="b-notes" placeholder="Optional notes"/>
-          </div>
+      <!-- Medicine Info -->
+      <div class="form-grid form-grid-2" style="margin-bottom:16px;">
+        <div class="field">
+          <label>Type of Medicine *</label>
+          <select id="d-medType" required></select>
         </div>
-        <div class="flex-end" style="margin-top:16px;">
-          <button class="btn btn-secondary" onclick="resetBasic()">Reset</button>
-          <button class="btn btn-primary" onclick="saveBasic()">Save Stock Entry</button>
+        <div class="field">
+          <label>Name of Medicine *</label>
+          <input type="text" id="d-medName" placeholder="e.g. Paracetamol 500mg"/>
+        </div>
+        <div class="field">
+          <label>Brand Name</label>
+          <input type="text" id="d-brandName" placeholder="e.g. Calpol, Dolo"/>
+        </div>
+        <div class="field">
+          <label>Expiry Date *</label>
+          <input type="date" id="d-expiry"/>
+        </div>
+        <div class="field">
+          <label>Quantity Type *</label>
+          <select id="d-qtyType" onchange="onQtyTypeChange()" required></select>
+        </div>
+        <div class="field">
+          <label>Stock Available *
+            <span class="hint" id="stock-hint">(number of units)</span>
+          </label>
+          <input type="number" id="d-quantity" min="0" placeholder="0" oninput="recalcPricing()"/>
         </div>
       </div>
-    </div>
-  </div>
 
-  <!-- ===== DETAILED TAB (with Pricing) ===== -->
-  <div class="tab-panel" id="tab-detailed">
-    <div class="card">
-      <div class="card-header"><span class="card-title">Detailed Stock Entry with Pricing</span></div>
-      <div class="card-body">
+      <!-- Strip-specific field — tablets per strip -->
+      <div id="strip-section" style="display:none;margin-bottom:16px;">
+        <div style="background:rgba(0,153,255,.07);border:1px solid rgba(0,153,255,.2);border-radius:10px;padding:14px 16px;">
+          <p style="font-size:.82rem;font-weight:600;color:var(--info);margin:0 0 10px;">
+            &#9432; Strip Configuration — You selected Strips
+          </p>
+          <div class="form-grid form-grid-2">
+            <div class="field">
+              <label>Tablets per Strip *</label>
+              <select id="d-tabletsPerStrip" onchange="recalcPricing()">
+                <option value="10">10 tablets/strip</option>
+                <option value="15">15 tablets/strip</option>
+                <option value="20">20 tablets/strip</option>
+                <option value="custom">Custom...</option>
+              </select>
+            </div>
+            <div class="field" id="custom-tps-wrap" style="display:none;">
+              <label>Custom tablets per strip</label>
+              <input type="number" id="d-customTps" min="1" placeholder="e.g. 30" oninput="recalcPricing()"/>
+            </div>
+          </div>
+          <p style="font-size:.78rem;color:var(--muted);margin:8px 0 0;">
+            Total tablets = <strong id="total-tablets-display">0</strong>
+            &nbsp;|&nbsp; Enter cost per strip or per tablet below. You'll also be able to
+            sell this medicine as whole strips OR loose tablets later in Billing / Stock Sale.
+          </p>
+        </div>
+      </div>
 
-        <!-- Medicine Info -->
-        <div class="form-grid form-grid-2" style="margin-bottom:16px;">
-          <div class="field">
-            <label>Type of Medicine *</label>
-            <select id="d-medType" required></select>
+      <!-- Pricing Section -->
+      <div class="pricing-grid" id="pricing-grid">
+        <div class="section-label">Pricing Details</div>
+
+        <!-- Cost Price (before GST) -->
+        <div class="field">
+          <label>
+            Cost Price (Base) *
+            <span class="hint" id="cost-label-hint">(what you paid per unit, before GST)</span>
+          </label>
+          <input type="number" id="d-costPrice" min="0" step="0.01"
+            placeholder="0.00" oninput="recalcPricing()"/>
+        </div>
+
+        <!-- GST % on cost price -->
+        <div class="field">
+          <label>
+            GST % (on Cost Price)
+            <span class="hint">applied to cost price, not MRP</span>
+          </label>
+          <input type="number" id="d-gst" min="0" max="100" step="0.01"
+            placeholder="e.g. 5" oninput="recalcPricing()"/>
+        </div>
+
+        <!-- Tablets: also show per-tablet cost -->
+        <div class="field" id="cost-per-tablet-wrap" style="display:none;">
+          <label>Cost per Tablet incl. GST (auto)</label>
+          <input type="number" id="d-costPerTablet" min="0" step="0.001"
+            placeholder="0.000" oninput="onCostPerTabletChange()" style="background:rgba(0,153,255,.05);"/>
+          <p class="hint">Edit either — they sync automatically.</p>
+        </div>
+
+        <!-- MRP -->
+        <div class="field">
+          <label>
+            MRP *
+            <span class="hint" id="mrp-label-hint">(printed on packaging)</span>
+          </label>
+          <input type="number" id="d-mrp" min="0" step="0.01"
+            placeholder="0.00" oninput="recalcPricing()"/>
+        </div>
+
+        <!-- Discount from agency -->
+        <div class="field">
+          <label>Agency Discount %</label>
+          <input type="number" id="d-discount" min="0" max="100" step="0.1"
+            placeholder="0" oninput="recalcPricing()"/>
+          <p class="hint">Discount you got from the agency on MRP (for your reference).</p>
+        </div>
+
+        <!-- GST breakdown row -->
+        <div class="gst-box">
+          <div class="pr-item">
+            <span class="pr-label">GST Amount / Unit</span>
+            <span class="pr-val" id="res-gst-amount">Rs. 0.00</span>
           </div>
-          <div class="field">
-            <label>Name of Medicine *</label>
-            <input type="text" id="d-medName" placeholder="e.g. Paracetamol 500mg"/>
+          <div class="pr-item">
+            <span class="pr-label">Cost Price incl. GST / Unit</span>
+            <span class="pr-val" id="res-cost-incl-gst">Rs. 0.00</span>
           </div>
-          <div class="field">
-            <label>Brand Name</label>
-            <input type="text" id="d-brandName" placeholder="e.g. Calpol, Dolo"/>
-          </div>
-          <div class="field">
-            <label>Expiry Date *</label>
-            <input type="date" id="d-expiry"/>
-          </div>
-          <div class="field">
-            <label>Quantity Type *</label>
-            <select id="d-qtyType" onchange="onQtyTypeChange()" required></select>
-          </div>
-          <div class="field">
-            <label>Stock Available *
-              <span class="hint" id="stock-hint">(number of units)</span>
-            </label>
-            <input type="number" id="d-quantity" min="0" placeholder="0" oninput="recalcPricing()"/>
+          <div class="pr-item" id="tablet-gst-wrap" style="display:none;">
+            <span class="pr-label">Cost / Tablet incl. GST</span>
+            <span class="pr-val" id="res-tablet-cost-gst">Rs. 0.000</span>
           </div>
         </div>
 
-        <!-- Strip-specific field — tablets per strip -->
-        <div id="strip-section" style="display:none;margin-bottom:16px;">
-          <div style="background:rgba(0,153,255,.07);border:1px solid rgba(0,153,255,.2);border-radius:10px;padding:14px 16px;">
-            <p style="font-size:.82rem;font-weight:600;color:var(--info);margin:0 0 10px;">
-              &#9432; Strip Configuration — You selected Strips
-            </p>
-            <div class="form-grid form-grid-2">
-              <div class="field">
-                <label>Tablets per Strip *</label>
-                <select id="d-tabletsPerStrip" onchange="recalcPricing()">
-                  <option value="10">10 tablets/strip</option>
-                  <option value="15">15 tablets/strip</option>
-                  <option value="20">20 tablets/strip</option>
-                  <option value="custom">Custom...</option>
-                </select>
-              </div>
-              <div class="field" id="custom-tps-wrap" style="display:none;">
-                <label>Custom tablets per strip</label>
-                <input type="number" id="d-customTps" min="1" placeholder="e.g. 30" oninput="recalcPricing()"/>
-              </div>
-            </div>
-            <p style="font-size:.78rem;color:var(--muted);margin:8px 0 0;">
-              Total tablets = <strong id="total-tablets-display">0</strong>
-              &nbsp;|&nbsp; Enter cost per strip or per tablet below.
-            </p>
+        <!-- Results row -->
+        <div class="price-result">
+          <div class="pr-item">
+            <span class="pr-label">Cost Price (Base) / Unit</span>
+            <span class="pr-val orange" id="res-cost">Rs. 0.00</span>
+          </div>
+          <div class="pr-item">
+            <span class="pr-label">MRP / Unit</span>
+            <span class="pr-val blue" id="res-mrp">Rs. 0.00</span>
+          </div>
+          <div class="pr-item">
+            <span class="pr-label">Max Profit / Unit (MRP − Cost incl. GST)</span>
+            <span class="pr-val green" id="res-profit-unit">Rs. 0.00</span>
+          </div>
+          <div class="pr-item">
+            <span class="pr-label">Max Profit on Batch</span>
+            <span class="pr-val green" id="res-profit-batch">Rs. 0.00</span>
+          </div>
+          <div class="pr-item" id="tablet-cost-wrap" style="display:none;">
+            <span class="pr-label">Cost per Tablet (Base)</span>
+            <span class="pr-val orange" id="res-tablet-cost">Rs. 0.000</span>
           </div>
         </div>
 
-        <!-- Pricing Section -->
-        <div class="pricing-grid" id="pricing-grid">
-          <div class="section-label">Pricing Details</div>
-
-          <!-- Cost Price -->
-          <div class="field">
-            <label>
-              Cost Price *
-              <span class="hint" id="cost-label-hint">(what you paid per unit)</span>
-            </label>
-            <input type="number" id="d-costPrice" min="0" step="0.01"
-              placeholder="0.00" oninput="recalcPricing()"/>
+        <!-- Batch totals — total cost price & total MRP for the ENTIRE batch (qty × unit price) -->
+        <div class="batch-box">
+          <div class="section-label" style="border:none;padding:0;margin:0 0 2px;">
+            Batch Totals&nbsp;<span style="text-transform:none;font-weight:400;">(Stock Available &times; Price per Unit)</span>
           </div>
-
-          <!-- Tablets: also show per-tablet cost -->
-          <div class="field" id="cost-per-tablet-wrap" style="display:none;">
-            <label>Cost per Tablet (auto)</label>
-            <input type="number" id="d-costPerTablet" min="0" step="0.001"
-              placeholder="0.000" oninput="onCostPerTabletChange()" style="background:rgba(0,153,255,.05);"/>
-            <p class="hint">Edit either — they sync automatically.</p>
+          <div class="pr-item">
+            <span class="pr-label">Total Cost Price (Batch, incl. GST)</span>
+            <span class="pr-val orange" id="res-batch-cost">Rs. 0.00</span>
           </div>
-
-          <!-- MRP -->
-          <div class="field">
-            <label>
-              MRP *
-              <span class="hint" id="mrp-label-hint">(printed on packaging)</span>
-            </label>
-            <input type="number" id="d-mrp" min="0" step="0.01"
-              placeholder="0.00" oninput="recalcPricing()"/>
-          </div>
-
-          <!-- Discount from agency -->
-          <div class="field">
-            <label>Agency Discount %</label>
-            <input type="number" id="d-discount" min="0" max="100" step="0.1"
-              placeholder="0" oninput="recalcPricing()"/>
-            <p class="hint">Discount you got from the agency on MRP.</p>
-          </div>
-
-          <!-- Results row -->
-          <div class="price-result">
-            <div class="pr-item">
-              <span class="pr-label">Cost Price / Unit</span>
-              <span class="pr-val orange" id="res-cost">Rs. 0.00</span>
-            </div>
-            <div class="pr-item">
-              <span class="pr-label">MRP / Unit</span>
-              <span class="pr-val blue" id="res-mrp">Rs. 0.00</span>
-            </div>
-            <div class="pr-item">
-              <span class="pr-label">Max Profit / Unit</span>
-              <span class="pr-val green" id="res-profit-unit">Rs. 0.00</span>
-            </div>
-            <div class="pr-item">
-              <span class="pr-label">Max Profit on Batch</span>
-              <span class="pr-val green" id="res-profit-batch">Rs. 0.00</span>
-            </div>
-            <div class="pr-item" id="tablet-cost-wrap" style="display:none;">
-              <span class="pr-label">Cost per Tablet</span>
-              <span class="pr-val orange" id="res-tablet-cost">Rs. 0.000</span>
-            </div>
+          <div class="pr-item">
+            <span class="pr-label">Total MRP (Batch)</span>
+            <span class="pr-val blue" id="res-batch-mrp">Rs. 0.00</span>
           </div>
         </div>
+      </div>
 
-        <div class="field" style="margin-top:16px;">
-          <label>Notes</label>
-          <input type="text" id="d-notes" placeholder="Optional notes about this batch"/>
-        </div>
+      <div class="field" style="margin-top:16px;">
+        <label>Notes</label>
+        <input type="text" id="d-notes" placeholder="Optional notes about this batch"/>
+      </div>
 
-        <div class="flex-end" style="margin-top:20px;">
-          <button class="btn btn-secondary" onclick="resetDetailed()">Reset</button>
-          <button class="btn btn-primary" onclick="saveDetailed()">Save Stock Entry</button>
-        </div>
+      <div class="flex-end" style="margin-top:20px;">
+        <button class="btn btn-secondary" onclick="resetDetailed()">Reset</button>
+        <button class="btn btn-primary" onclick="saveDetailed()">Save Stock Entry</button>
       </div>
     </div>
   </div>
@@ -340,13 +337,13 @@ window._rpOnSyncComplete=function(){ buildRecentTable(); };
 RP.showSyncBanner('add-sync-banner');
 
 /* ---- Populate dropdowns ---- */
-['b-medType','d-medType'].forEach(function(id){
+['d-medType'].forEach(function(id){
   var sel=document.getElementById(id);
   RP.MED_TYPES.forEach(function(t){
     sel.innerHTML+='<option value="'+t+'">'+t+'</option>';
   });
 });
-['b-qtyType','d-qtyType'].forEach(function(id){
+['d-qtyType'].forEach(function(id){
   var sel=document.getElementById(id);
   // Add "Tablets" as first option for per-tablet pricing
   var allTypes=['Tablets'].concat(RP.QTY_TYPES.filter(function(q){return q!=='Tablets';}));
@@ -355,51 +352,8 @@ RP.showSyncBanner('add-sync-banner');
   });
 });
 
-/* ---- Tab switching ---- */
-function switchTab(name){
-  ['basic','detailed'].forEach(function(n){
-    document.getElementById('tab-'+n).classList.toggle('active',n===name);
-    document.querySelectorAll('.tab-btn').forEach(function(b,i){
-      b.classList.toggle('active',['basic','detailed'][i]===name);
-    });
-  });
-}
-
 /* ============================================================
-   BASIC ENTRY
-============================================================ */
-function onBasicQtyTypeChange(){
-  // No special logic needed for basic tab
-}
-function saveBasic(){
-  var medType  = document.getElementById('b-medType').value;
-  var name     = document.getElementById('b-medName').value.trim();
-  var brand    = document.getElementById('b-brandName').value.trim();
-  var qtyType  = document.getElementById('b-qtyType').value;
-  var qty      = document.getElementById('b-quantity').value;
-  var expiry   = document.getElementById('b-expiry').value;
-  var notes    = document.getElementById('b-notes').value.trim();
-  if(!medType||!name||!qtyType||qty===''||!expiry){
-    RP.toast('Please fill all required fields.','error'); return;
-  }
-  var item={
-    id:RP.uid(), medType:medType, name:name, brand:brand, qtyType:qtyType,
-    quantity:parseInt(qty), expiry:expiry, notes:notes,
-    costPrice:0, costPricePerUnit:0, mrp:0, mrpPerUnit:0,
-    tabletsPerStrip:0, addedOn:localDateStr()
-  };
-  saveItem(item);
-  resetBasic();
-}
-function resetBasic(){
-  ['b-medType','b-qtyType'].forEach(function(id){ document.getElementById(id).value=''; });
-  ['b-medName','b-brandName','b-quantity','b-expiry','b-notes'].forEach(function(id){
-    document.getElementById(id).value='';
-  });
-}
-
-/* ============================================================
-   DETAILED ENTRY — Pricing logic
+   DETAILED ENTRY — Pricing logic (with GST)
 ============================================================ */
 function onQtyTypeChange(){
   var qt=document.getElementById('d-qtyType').value;
@@ -408,6 +362,7 @@ function onQtyTypeChange(){
   document.getElementById('strip-section').style.display=isStrip?'block':'none';
   document.getElementById('cost-per-tablet-wrap').style.display=isStrip?'flex':'none';
   document.getElementById('tablet-cost-wrap').style.display=isStrip?'flex':'none';
+  document.getElementById('tablet-gst-wrap').style.display=isStrip?'flex':'none';
 
   // Update labels
   var hint=document.getElementById('stock-hint');
@@ -415,11 +370,11 @@ function onQtyTypeChange(){
   var mrpHint=document.getElementById('mrp-label-hint');
   if(isStrip){
     hint.textContent='(number of strips)';
-    costHint.textContent='per strip (cost you paid)';
+    costHint.textContent='per strip, before GST (cost you paid)';
     mrpHint.textContent='per strip (MRP on strip)';
   } else {
     hint.textContent='(number of '+qt.toLowerCase()+')';
-    costHint.textContent='per '+qt.toLowerCase().replace(/s$/,'')+' (what you paid)';
+    costHint.textContent='per '+qt.toLowerCase().replace(/s$/,'')+', before GST (what you paid)';
     mrpHint.textContent='per '+qt.toLowerCase().replace(/s$/,'')+' (MRP on pack)';
   }
   recalcPricing();
@@ -441,37 +396,54 @@ document.getElementById('d-tabletsPerStrip').onchange=function(){
 };
 
 function recalcPricing(){
-  var qt       = document.getElementById('d-qtyType').value;
-  var isStrip  = (qt==='Strips'||qt==='Tablets');
-  var qty      = parseFloat(document.getElementById('d-quantity').value)||0;
-  var costPrice= parseFloat(document.getElementById('d-costPrice').value)||0;
-  var mrp      = parseFloat(document.getElementById('d-mrp').value)||0;
-  var tps      = isStrip?getTabletsPerStrip():1;
+  var qt        = document.getElementById('d-qtyType').value;
+  var isStrip   = (qt==='Strips'||qt==='Tablets');
+  var qty       = parseFloat(document.getElementById('d-quantity').value)||0;
+  var costBase  = parseFloat(document.getElementById('d-costPrice').value)||0;   // BEFORE GST
+  var gstPct    = parseFloat(document.getElementById('d-gst').value)||0;
+  var mrp       = parseFloat(document.getElementById('d-mrp').value)||0;
+  var tps       = isStrip?getTabletsPerStrip():1;
   var totalTablets = isStrip?(qty*tps):qty;
 
   // Update total tablets display
   if(isStrip) document.getElementById('total-tablets-display').textContent=totalTablets;
 
-  // Cost per tablet (for strips)
-  var costPerTablet = isStrip&&tps>0 ? costPrice/tps : costPrice;
+  // ---- GST calculation (applied on COST PRICE, never on MRP) ----
+  var gstAmount   = costBase * (gstPct/100);       // GST amount per unit
+  var costInclGst = costBase + gstAmount;          // real cost price to use for profit
+
+  // Cost per tablet (for strips) — base (before GST) and incl. GST
+  var costPerTabletBase    = isStrip&&tps>0 ? costBase/tps    : costBase;
+  var costPerTabletInclGst = isStrip&&tps>0 ? costInclGst/tps : costInclGst;
 
   // Sync cost-per-tablet input (only update if not currently being edited)
   var cptInput=document.getElementById('d-costPerTablet');
   if(document.activeElement!==cptInput){
-    cptInput.value = isStrip&&costPrice>0 ? costPerTablet.toFixed(3) : '';
+    cptInput.value = isStrip&&costBase>0 ? costPerTabletInclGst.toFixed(3) : '';
   }
 
-  // Profit per unit (strip or bottle etc.)
-  var profitPerUnit = mrp - costPrice;
+  // Profit per unit (strip or bottle etc.) — MRP minus cost INCLUDING GST
+  var profitPerUnit = mrp - costInclGst;
   // Profit on entire batch
   var profitBatch = profitPerUnit * qty;
 
+  // Batch totals — total cost price and total MRP for the whole batch
+  var batchCost = costInclGst * qty;
+  var batchMrp  = mrp * qty;
+
   // Update results
-  document.getElementById('res-cost').textContent   = 'Rs. '+costPrice.toFixed(2);
+  document.getElementById('res-cost').textContent   = 'Rs. '+costBase.toFixed(2);
   document.getElementById('res-mrp').textContent    = 'Rs. '+mrp.toFixed(2);
+  document.getElementById('res-gst-amount').textContent    = 'Rs. '+gstAmount.toFixed(2);
+  document.getElementById('res-cost-incl-gst').textContent = 'Rs. '+costInclGst.toFixed(2);
   document.getElementById('res-profit-unit').textContent  = 'Rs. '+profitPerUnit.toFixed(2);
   document.getElementById('res-profit-batch').textContent = 'Rs. '+profitBatch.toFixed(2);
-  if(isStrip) document.getElementById('res-tablet-cost').textContent = 'Rs. '+costPerTablet.toFixed(3);
+  document.getElementById('res-batch-cost').textContent   = 'Rs. '+batchCost.toFixed(2);
+  document.getElementById('res-batch-mrp').textContent    = 'Rs. '+batchMrp.toFixed(2);
+  if(isStrip){
+    document.getElementById('res-tablet-cost').textContent = 'Rs. '+costPerTabletBase.toFixed(3);
+    document.getElementById('res-tablet-cost-gst').textContent = 'Rs. '+costPerTabletInclGst.toFixed(3);
+  }
 
   // Color profit: red if negative
   var pColor = profitPerUnit>=0 ? 'var(--success)' : 'var(--danger)';
@@ -479,12 +451,15 @@ function recalcPricing(){
   document.getElementById('res-profit-batch').style.color = pColor;
 }
 
-// When user edits cost-per-tablet — back-calculate cost per strip
+// When user edits cost-per-tablet (incl. GST) — back-calculate base cost per strip
 function onCostPerTabletChange(){
   var tps=getTabletsPerStrip();
-  var cpt=parseFloat(document.getElementById('d-costPerTablet').value)||0;
-  var costPerStrip=cpt*tps;
-  document.getElementById('d-costPrice').value=costPerStrip.toFixed(2);
+  var gstPct=parseFloat(document.getElementById('d-gst').value)||0;
+  var cptInclGst=parseFloat(document.getElementById('d-costPerTablet').value)||0;
+  // Remove GST to get the base cost per tablet, then scale up to per strip
+  var cptBase = gstPct>0 ? (cptInclGst/(1+(gstPct/100))) : cptInclGst;
+  var costPerStripBase = cptBase*tps;
+  document.getElementById('d-costPrice').value=costPerStripBase.toFixed(2);
   recalcPricing();
 }
 
@@ -496,15 +471,20 @@ function saveDetailed(){
   var qty      = document.getElementById('d-quantity').value;
   var expiry   = document.getElementById('d-expiry').value;
   var notes    = document.getElementById('d-notes').value.trim();
-  var costPrice= parseFloat(document.getElementById('d-costPrice').value)||0;
+  var costBase = parseFloat(document.getElementById('d-costPrice').value)||0;
+  var gstPct   = parseFloat(document.getElementById('d-gst').value)||0;
   var mrp      = parseFloat(document.getElementById('d-mrp').value)||0;
 
   if(!medType||!name||!qtyType||qty===''||!expiry){
     RP.toast('Please fill all required fields.','error'); return;
   }
-  if(costPrice<=0){ RP.toast('Please enter cost price.','error'); return; }
+  if(costBase<=0){ RP.toast('Please enter cost price.','error'); return; }
   if(mrp<=0){ RP.toast('Please enter MRP.','error'); return; }
-  if(costPrice>mrp){ if(!confirm('Cost price is higher than MRP. Continue?')) return; }
+
+  var gstAmount   = parseFloat((costBase*(gstPct/100)).toFixed(4));
+  var costInclGst = parseFloat((costBase+gstAmount).toFixed(4));
+
+  if(costInclGst>mrp){ if(!confirm('Cost price (incl. GST) is higher than MRP. Continue?')) return; }
 
   var isStrip=(qtyType==='Strips'||qtyType==='Tablets');
   var tps=isStrip?getTabletsPerStrip():1;
@@ -512,18 +492,24 @@ function saveDetailed(){
   var item={
     id:RP.uid(), medType:medType, name:name, brand:brand, qtyType:qtyType,
     quantity:parseInt(qty), expiry:expiry, notes:notes,
-    // Pricing fields — stored per UNIT (strip, bottle, etc.)
-    costPrice:    costPrice,               // cost per unit (what you paid to agency)
+    // ---- GST fields ----
+    costPriceBase:  costBase,              // cost price you paid, BEFORE GST
+    gstPercent:     gstPct,                // GST % applied to cost price
+    gstAmount:      gstAmount,             // GST amount per unit
+    // ---- Pricing fields — stored per UNIT (strip, bottle, etc.) ----
+    // costPrice / costPricePerUnit now represent the REAL cost (incl. GST) —
+    // this is what profit is calculated against everywhere in the app.
+    costPrice:        costInclGst,
+    costPricePerUnit: costInclGst,
     mrp:          mrp,                     // MRP per unit
-    tabletsPerStrip: isStrip?tps:0,        // for tablets/strips only
-    costPricePerUnit: costPrice,           // alias for clarity
     mrpPerUnit:   mrp,                     // alias for clarity
-    // Per-tablet helpers (tablets only)
-    costPerTablet: isStrip?(costPrice/tps):0,
-    mrpPerTablet:  isStrip?(mrp/tps):0,
-    // Batch totals
-    totalCostBatch: costPrice*parseInt(qty),
-    totalMrpBatch:  mrp*parseInt(qty),
+    tabletsPerStrip: isStrip?tps:0,        // for tablets/strips only
+    // Per-tablet helpers (tablets only) — cost incl. GST
+    costPerTablet: isStrip?parseFloat((costInclGst/tps).toFixed(4)):0,
+    mrpPerTablet:  isStrip?parseFloat((mrp/tps).toFixed(4)):0,
+    // Batch totals (cost incl. GST)
+    totalCostBatch: parseFloat((costInclGst*parseInt(qty)).toFixed(2)),
+    totalMrpBatch:  parseFloat((mrp*parseInt(qty)).toFixed(2)),
     addedOn: localDateStr()
   };
 
@@ -536,21 +522,23 @@ function resetDetailed(){
     var el=document.getElementById(id); if(el) el.value=el.options?el.options[0].value:'';
   });
   ['d-medName','d-brandName','d-expiry','d-notes','d-quantity',
-   'd-costPrice','d-mrp','d-discount','d-customTps','d-costPerTablet'].forEach(function(id){
+   'd-costPrice','d-gst','d-mrp','d-discount','d-customTps','d-costPerTablet'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.value='';
   });
-  ['res-cost','res-mrp','res-profit-unit','res-profit-batch'].forEach(function(id){
+  ['res-cost','res-mrp','res-profit-unit','res-profit-batch',
+   'res-gst-amount','res-cost-incl-gst','res-batch-cost','res-batch-mrp'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.textContent='Rs. 0.00';
   });
   document.getElementById('strip-section').style.display='none';
   document.getElementById('cost-per-tablet-wrap').style.display='none';
   document.getElementById('tablet-cost-wrap').style.display='none';
+  document.getElementById('tablet-gst-wrap').style.display='none';
   document.getElementById('custom-tps-wrap').style.display='none';
   document.getElementById('total-tablets-display').textContent='0';
 }
 
 /* ============================================================
-   SAVE ITEM — shared by both tabs
+   SAVE ITEM
 ============================================================ */
 function saveItem(item){
   RP.addStockItem(item);
@@ -594,7 +582,7 @@ function buildRecentTable(){
     '<thead><tr>'+
       '<th>Medicine</th><th>Type</th><th>Brand</th>'+
       '<th>Qty</th><th>Unit</th>'+
-      '<th>Cost/Unit</th><th>MRP/Unit</th>'+
+      '<th>Cost/Unit (incl. GST)</th><th>GST %</th><th>MRP/Unit</th>'+
       '<th>Expiry</th><th>Added</th>'+
     '</tr></thead>'+
     '<tbody>'+stock.map(function(s){
@@ -606,6 +594,7 @@ function buildRecentTable(){
         '<td class="mono">'+s.quantity+'</td>'+
         '<td>'+s.qtyType+'</td>'+
         '<td class="mono">'+(hasCost?'Rs.'+parseFloat(s.costPrice).toFixed(2):'—')+'</td>'+
+        '<td class="mono">'+(s.gstPercent?parseFloat(s.gstPercent).toFixed(1)+'%':'—')+'</td>'+
         '<td class="mono">'+(s.mrp>0?'Rs.'+parseFloat(s.mrp).toFixed(2):'—')+'</td>'+
         '<td>'+RP.fmtDate(s.expiry)+'</td>'+
         '<td>'+RP.fmtDate(s.addedOn)+'</td>'+

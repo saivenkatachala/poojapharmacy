@@ -75,16 +75,29 @@
           <div class="pricing-section-label">Pricing (optional — update if changed)</div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
             <div class="field">
-              <label>Cost Price / Unit</label>
-              <input type="number" id="e-costPrice" min="0" step="0.01" placeholder="0.00"/>
+              <label>Cost Price (Base) / Unit
+                <span style="display:block;font-size:.68rem;color:var(--muted);font-weight:400;">before GST</span>
+              </label>
+              <input type="number" id="e-costPriceBase" min="0" step="0.01" placeholder="0.00" oninput="recalcEditGst()"/>
+            </div>
+            <div class="field">
+              <label>GST %</label>
+              <input type="number" id="e-gst" min="0" max="100" step="0.01" placeholder="0" oninput="recalcEditGst()"/>
             </div>
             <div class="field">
               <label>MRP / Unit</label>
               <input type="number" id="e-mrp" min="0" step="0.01" placeholder="0.00"/>
             </div>
             <div class="field">
+              <label>Cost Price incl. GST / Unit
+                <span style="display:block;font-size:.68rem;color:var(--muted);font-weight:400;">auto — used for profit</span>
+              </label>
+              <input type="number" id="e-costPrice" min="0" step="0.01" placeholder="0.00" readonly
+                style="background:rgba(0,153,255,.05);"/>
+            </div>
+            <div class="field">
               <label>Tablets / Strip</label>
-              <input type="number" id="e-tabletsPerStrip" min="0" placeholder="0"/>
+              <input type="number" id="e-tabletsPerStrip" min="0" placeholder="0" oninput="recalcEditGst()"/>
             </div>
           </div>
         </div>
@@ -288,6 +301,9 @@ function renderTable(){
       pricingHtml=
         '<span class="cost-badge cost">C:'+costPrice.toFixed(2)+'</span> '+
         '<span class="cost-badge mrp">M:'+mrp.toFixed(2)+'</span>';
+      if(s.gstPercent){
+        pricingHtml+=' <span class="cost-badge" style="background:rgba(168,85,247,.12);color:#a855f7;">GST:'+parseFloat(s.gstPercent).toFixed(1)+'%</span>';
+      }
       if(mrp>0&&costPrice>0){
         var profit=mrp-costPrice;
         pricingHtml+=' <span class="cost-badge profit">+'+profit.toFixed(2)+'</span>';
@@ -369,7 +385,22 @@ function openEdit(id){
   document.getElementById('e-costPrice').value = parseFloat(s.costPrice||s.costPricePerUnit||0).toFixed(2);
   document.getElementById('e-mrp').value       = parseFloat(s.mrp||s.mrpPerUnit||0).toFixed(2);
   document.getElementById('e-tabletsPerStrip').value = s.tabletsPerStrip||0;
+  // GST fields — fall back gracefully for older entries saved before GST existed
+  var gstPct  = s.gstPercent!==undefined ? parseFloat(s.gstPercent)||0 : 0;
+  var costBase= s.costPriceBase!==undefined ? parseFloat(s.costPriceBase)||0
+                : parseFloat((parseFloat(s.costPrice||s.costPricePerUnit||0)/(1+(gstPct/100))).toFixed(2));
+  document.getElementById('e-gst').value         = gstPct;
+  document.getElementById('e-costPriceBase').value = costBase.toFixed(2);
   document.getElementById('edit-modal').classList.add('open');
+  recalcEditGst();
+}
+
+/* ---- Recompute Cost Price incl. GST (read-only, used for profit) ---- */
+function recalcEditGst(){
+  var costBase=parseFloat(document.getElementById('e-costPriceBase').value)||0;
+  var gstPct  =parseFloat(document.getElementById('e-gst').value)||0;
+  var costInclGst=costBase+(costBase*(gstPct/100));
+  document.getElementById('e-costPrice').value=costInclGst.toFixed(2);
 }
 
 function closeEdit(){
@@ -382,7 +413,10 @@ function saveEdit(){
   var stock=RP.getStock();
   var idx=stock.findIndex(function(x){return x.id===editId;});
   if(idx===-1) return;
-  var costPrice=parseFloat(document.getElementById('e-costPrice').value)||0;
+  var costBase=parseFloat(document.getElementById('e-costPriceBase').value)||0;
+  var gstPct=parseFloat(document.getElementById('e-gst').value)||0;
+  var gstAmount=parseFloat((costBase*(gstPct/100)).toFixed(4));
+  var costPrice=parseFloat((costBase+gstAmount).toFixed(4)); // real cost, incl. GST — used for profit
   var mrp=parseFloat(document.getElementById('e-mrp').value)||0;
   var tps=parseInt(document.getElementById('e-tabletsPerStrip').value)||0;
   stock[idx]=Object.assign({},stock[idx],{
@@ -393,6 +427,9 @@ function saveEdit(){
     quantity:  parseInt(document.getElementById('e-quantity').value)||0,
     expiry:    document.getElementById('e-expiry').value,
     notes:     document.getElementById('e-notes').value.trim(),
+    costPriceBase: costBase,
+    gstPercent:    gstPct,
+    gstAmount:     gstAmount,
     costPrice: costPrice,
     costPricePerUnit: costPrice,
     mrp:       mrp,

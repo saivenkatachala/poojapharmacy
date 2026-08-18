@@ -129,6 +129,15 @@
                 style="background:var(--surface2);opacity:.7;cursor:not-allowed;"/>
             </div>
 
+            <!-- Sell As: Strip or Tablet (only shown when medicine has tablets/strip configured) -->
+            <div class="field" id="sell-as-wrap" style="display:none;">
+              <label>Sell As</label>
+              <select id="s-sellAs" onchange="onSellAsChange()">
+                <option value="strip">Strip</option>
+                <option value="tablet">Tablet</option>
+              </select>
+            </div>
+
             <!-- Quantity sold -->
             <div class="field">
               <label>Quantity Sold *</label>
@@ -282,12 +291,14 @@ function populateMedicineDropdown(){
   var current=sel.value;
   sel.innerHTML='<option value="">-- Select Medicine --</option>';
   RP.getStock()
-    .filter(function(s){ return parseInt(s.quantity)>0; })
+    .filter(function(s){ return parseFloat(s.quantity)>0; })
     .forEach(function(s){
       var hasCost=s.costPrice>0;
+      var tps=parseFloat(s.tabletsPerStrip||0);
       var label=s.name+(s.brand?' ('+s.brand+')':'')+
         ' — '+s.quantity+' '+s.qtyType+
-        (hasCost?' | Cost:Rs.'+parseFloat(s.costPrice).toFixed(2):'');
+        (hasCost?' | Cost:Rs.'+parseFloat(s.costPrice).toFixed(2):'')+
+        (tps>0?' | '+tps+'/strip':'');
       var opt=document.createElement('option');
       opt.value=s.id;
       opt.textContent=label;
@@ -296,7 +307,9 @@ function populateMedicineDropdown(){
       opt.setAttribute('data-qtytype',s.qtyType||'');
       opt.setAttribute('data-qty',s.quantity||0);
       opt.setAttribute('data-name',s.name||'');
-      opt.setAttribute('data-tps',s.tabletsPerStrip||0);
+      opt.setAttribute('data-tps',tps);
+      opt.setAttribute('data-cost-tablet',s.costPerTablet||(tps>0?(parseFloat(s.costPrice||0)/tps):0));
+      opt.setAttribute('data-mrp-tablet',s.mrpPerTablet||(tps>0?(parseFloat(s.mrp||0)/tps):0));
       sel.appendChild(opt);
     });
   if(current) sel.value=current;
@@ -309,23 +322,59 @@ populateMedicineDropdown();
 function onMedicineSelect(){
   var sel=document.getElementById('s-medicine');
   var opt=sel.selectedOptions[0];
+  var sellAsWrap=document.getElementById('sell-as-wrap');
   if(!opt||!opt.value){
     document.getElementById('s-qtyType').value='';
     document.getElementById('s-stock-hint').textContent='';
     document.getElementById('price-breakdown').style.display='none';
+    sellAsWrap.style.display='none';
     return;
   }
-  var availQty=parseInt(opt.getAttribute('data-qty'))||0;
-  var qtyType=opt.getAttribute('data-qtytype')||'';
-  var cost=parseFloat(opt.getAttribute('data-cost'))||0;
-  document.getElementById('s-qtyType').value=qtyType;
-  document.getElementById('s-stock-hint').textContent=
-    'Available: '+availQty+' '+qtyType+
-    (cost>0?' | Cost price: Rs.'+cost.toFixed(2)+' per '+qtyType.replace(/s$/,''):'');
-
-  // Set max on qty input
-  document.getElementById('s-qty').max=availQty;
+  var tps=parseFloat(opt.getAttribute('data-tps'))||0;
+  if(tps>0){
+    sellAsWrap.style.display='block';
+    document.getElementById('s-sellAs').value='strip';
+  } else {
+    sellAsWrap.style.display='none';
+  }
+  updateQtyTypeDisplay();
+  document.getElementById('s-qty').value='';
   recalcSale();
+}
+
+/* ---- When "Sell As" (Strip/Tablet) changes ---- */
+function onSellAsChange(){
+  updateQtyTypeDisplay();
+  document.getElementById('s-qty').value='';
+  recalcSale();
+}
+
+/* ---- Update the read-only Quantity Type box + stock hint based on chosen sell unit ---- */
+function updateQtyTypeDisplay(){
+  var sel=document.getElementById('s-medicine');
+  var opt=sel.selectedOptions[0];
+  if(!opt||!opt.value) return;
+  var tps=parseFloat(opt.getAttribute('data-tps'))||0;
+  var sellAs=(tps>0)?document.getElementById('s-sellAs').value:'strip';
+  var availStrips=parseFloat(opt.getAttribute('data-qty'))||0;
+  var qtyTypeLabel=opt.getAttribute('data-qtytype')||'';
+
+  if(sellAs==='tablet'&&tps>0){
+    var availTablets=Math.floor(availStrips*tps);
+    var costTablet=parseFloat(opt.getAttribute('data-cost-tablet'))||0;
+    document.getElementById('s-qtyType').value='Tablets';
+    document.getElementById('s-stock-hint').textContent=
+      'Available: '+availTablets+' tablets (from '+availStrips+' '+qtyTypeLabel+')'+
+      (costTablet>0?' | Cost price: Rs.'+costTablet.toFixed(2)+' per tablet':'');
+    document.getElementById('s-qty').max=availTablets;
+  } else {
+    var cost=parseFloat(opt.getAttribute('data-cost'))||0;
+    document.getElementById('s-qtyType').value=qtyTypeLabel;
+    document.getElementById('s-stock-hint').textContent=
+      'Available: '+availStrips+' '+qtyTypeLabel+
+      (cost>0?' | Cost price: Rs.'+cost.toFixed(2)+' per '+qtyTypeLabel.replace(/s$/,''):'');
+    document.getElementById('s-qty').max=availStrips;
+  }
 }
 
 /* ============================================================
@@ -339,11 +388,22 @@ function recalcSale(){
     return;
   }
 
-  var costPerUnit    = parseFloat(opt.getAttribute('data-cost'))||0;
-  var mrpPerUnit     = parseFloat(opt.getAttribute('data-mrp'))||0;
+  var tps      = parseFloat(opt.getAttribute('data-tps'))||0;
+  var sellAs   = (tps>0)?document.getElementById('s-sellAs').value:'strip';
+
+  var costPerUnit, mrpPerUnit, availQty;
+  if(sellAs==='tablet'&&tps>0){
+    costPerUnit = parseFloat(opt.getAttribute('data-cost-tablet'))||0;
+    mrpPerUnit  = parseFloat(opt.getAttribute('data-mrp-tablet'))||0;
+    availQty    = Math.floor((parseFloat(opt.getAttribute('data-qty'))||0)*tps);
+  } else {
+    costPerUnit = parseFloat(opt.getAttribute('data-cost'))||0;
+    mrpPerUnit  = parseFloat(opt.getAttribute('data-mrp'))||0;
+    availQty    = parseFloat(opt.getAttribute('data-qty'))||0;
+  }
+
   var qty            = parseFloat(document.getElementById('s-qty').value)||0;
   var discPct        = parseFloat(document.getElementById('s-discount').value)||0;
-  var availQty       = parseInt(opt.getAttribute('data-qty'))||0;
 
   // Enforce max qty
   if(qty>availQty){
@@ -395,11 +455,25 @@ function submitSale(){
   var opt=sel.selectedOptions[0];
   if(!opt||!opt.value){ RP.toast('Select a medicine.','error'); return; }
 
-  var qty=parseInt(document.getElementById('s-qty').value)||0;
+  var qty=parseFloat(document.getElementById('s-qty').value)||0;
   if(qty<=0){ RP.toast('Enter quantity sold.','error'); return; }
 
-  var costPerUnit   = parseFloat(opt.getAttribute('data-cost'))||0;
-  var mrpPerUnit    = parseFloat(opt.getAttribute('data-mrp'))||0;
+  var tps    = parseFloat(opt.getAttribute('data-tps'))||0;
+  var sellAs = (tps>0)?document.getElementById('s-sellAs').value:'strip';
+
+  var costPerUnit, mrpPerUnit, unitLabel, stockDeduct;
+  if(sellAs==='tablet'&&tps>0){
+    costPerUnit = parseFloat(opt.getAttribute('data-cost-tablet'))||0;
+    mrpPerUnit  = parseFloat(opt.getAttribute('data-mrp-tablet'))||0;
+    unitLabel   = 'Tablets';
+    stockDeduct = qty/tps;               // fraction of a strip
+  } else {
+    costPerUnit = parseFloat(opt.getAttribute('data-cost'))||0;
+    mrpPerUnit  = parseFloat(opt.getAttribute('data-mrp'))||0;
+    unitLabel   = opt.getAttribute('data-qtytype')||'';
+    stockDeduct = qty;
+  }
+
   var discPct       = parseFloat(document.getElementById('s-discount').value)||0;
   var effectiveMrp  = mrpPerUnit>0?mrpPerUnit:costPerUnit;
   var sellPerUnit   = effectiveMrp*(1-(discPct/100));
@@ -414,7 +488,8 @@ function submitSale(){
     id:           RP.uid(),
     stockId:      opt.value,
     medicineName: opt.getAttribute('data-name')||'',
-    qtyType:      opt.getAttribute('data-qtytype')||'',
+    qtyType:      unitLabel,
+    soldAs:       sellAs,
     qtySold:      qty,
     costPricePerUnit:   costPerUnit,
     mrpPerUnit:         effectiveMrp,
@@ -427,7 +502,17 @@ function submitSale(){
     createdOn:    new Date().toISOString()
   };
 
-  RP_SALES.add(sale);
+  // We deduct stock ourselves below (supports fractional strip deduction
+  // when sold as loose tablets), so tell RP_SALES.add to skip its own deduction.
+  RP_SALES.add(sale, true);
+
+  var stock=RP.getStock();
+  var sIdx=stock.findIndex(function(x){return x.id===sale.stockId;});
+  if(sIdx!==-1){
+    stock[sIdx].quantity=Math.max(0,parseFloat(((parseFloat(stock[sIdx].quantity)||0)-stockDeduct).toFixed(3)));
+    RP.saveStock(stock);
+    RP.postToSheet({action:'updateStock', data:stock[sIdx]});
+  }
 
   document.getElementById('sale-success-msg').innerHTML=
     '<strong>'+sale.medicineName+'</strong><br>'+
@@ -451,6 +536,8 @@ function closeSaleSuccess(){
 function resetSaleForm(){
   document.getElementById('s-medicine').value='';
   document.getElementById('s-qtyType').value='';
+  document.getElementById('s-sellAs').value='strip';
+  document.getElementById('sell-as-wrap').style.display='none';
   document.getElementById('s-qty').value='';
   document.getElementById('s-discount').value='';
   document.getElementById('s-stock-hint').textContent='';
