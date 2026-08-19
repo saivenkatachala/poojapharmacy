@@ -545,6 +545,23 @@ function confirmDelete(){
 }
 
 renderTable();
+
+/* ---- Deep-link support: ?edit=ID opens the edit modal directly (used by
+   the Add Stock page's "duplicate found" flow), ?q=SEARCH pre-fills the
+   search box. Lets other pages send the user straight to the right entry. ---- */
+(function handleUrlParams(){
+  var params=new URLSearchParams(window.location.search);
+  var editParam=params.get('edit');
+  var qParam=params.get('q');
+  if(qParam){
+    document.getElementById('search-input').value=qParam;
+    renderTable();
+  }
+  if(editParam){
+    var exists=RP.getStock().some(function(s){return s.id===editParam;});
+    if(exists) openEdit(editParam);
+  }
+})();
 </script>
 </body>
 </html>

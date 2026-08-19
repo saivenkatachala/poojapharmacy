@@ -3,76 +3,126 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Stock Sale — Pooja Pharmacy</title>
+<title>Bill Generation — Pooja Pharmacy</title>
 <link rel="icon" href="pp.png">
 <link rel="stylesheet" href="rp-styles.css"/>
 <style>
-  .sale-layout{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;}
-  @media(max-width:960px){.sale-layout{grid-template-columns:1fr;}}
+  .bill-layout{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;}
+  @media(max-width:960px){.bill-layout{grid-template-columns:1fr;}}
 
+  .bill-item-row{
+    display:grid;grid-template-columns:2fr 80px 110px 34px;
+    gap:10px;align-items:end;margin-bottom:10px;
+    background:var(--surface2);border:1px solid var(--border);
+    border-radius:10px;padding:12px;
+  }
+  @media(max-width:640px){
+    .bill-item-row{grid-template-columns:1fr 1fr;gap:8px;}
+    .bill-item-row .med-sel-wrap{grid-column:1/-1;}
+  }
+  .sell-as-select{
+    display:none;margin-top:6px;width:100%;
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:.8rem;
+  }
   .med-search-input{
     width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;
-    color:var(--text);font-family:'DM Sans',sans-serif;padding:10px 12px;font-size:.9rem;
+    color:var(--text);font-family:'DM Sans',sans-serif;
   }
   .med-search-results{
     display:none;position:absolute;top:100%;left:0;right:0;z-index:60;
     background:var(--surface);border:1px solid var(--border);border-radius:8px;
-    max-height:300px;overflow-y:auto;margin-top:4px;
+    max-height:280px;overflow-y:auto;margin-top:4px;
     box-shadow:0 10px 28px rgba(0,0,0,.28);
   }
   .med-search-results.open{display:block;}
-  .med-result-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);}
+  .med-result-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);}
   .med-result-item:last-child{border-bottom:none;}
   .med-result-item:hover{background:var(--surface2);}
-  .med-result-name{font-size:.88rem;font-weight:600;color:var(--text);}
+  .med-result-name{font-size:.85rem;font-weight:600;color:var(--text);}
   .med-result-brand{font-weight:400;color:var(--muted);}
-  .med-result-meta{font-size:.75rem;color:var(--muted);margin-top:2px;}
-  .med-result-empty{padding:14px;color:var(--muted);font-size:.85rem;text-align:center;}
+  .med-result-meta{font-size:.72rem;color:var(--muted);margin-top:2px;}
+  .med-result-empty{padding:12px;color:var(--muted);font-size:.82rem;text-align:center;}
+  .remove-btn{
+    background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.25);
+    color:var(--danger);border-radius:8px;cursor:pointer;
+    width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+    font-size:14px;transition:.2s;align-self:flex-end;
+  }
+  .remove-btn:hover{background:rgba(255,77,109,.25);}
 
-  .price-breakdown{
+  .bill-total-bar{
     background:var(--surface2);border:1px solid var(--border);
-    border-radius:12px;padding:16px 20px;margin-top:14px;
-  }
-  .pb-row{
+    border-radius:12px;padding:16px 20px;
     display:flex;justify-content:space-between;align-items:center;
-    padding:6px 0;border-bottom:1px solid var(--border);font-size:.88rem;
+    margin-top:14px;flex-wrap:wrap;gap:10px;
   }
-  .pb-row:last-child{border-bottom:none;padding-top:10px;margin-top:2px;}
-  .pb-row .label{color:var(--muted);}
-  .pb-row .value{font-weight:600;font-family:'JetBrains Mono',monospace;}
-  .pb-row.profit-row .value{color:var(--success);font-size:1.1rem;}
-  .pb-row.profit-row.loss .value{color:var(--danger);}
-  .pb-row.total-row{font-weight:700;font-size:.95rem;}
-  .pb-row.total-row .label{color:var(--text);}
-
-  .profit-badge{
-    display:inline-flex;align-items:center;gap:6px;
-    padding:4px 12px;border-radius:20px;font-size:.8rem;font-weight:700;
+  .total-amount{
+    font-family:'Playfair Display',serif;font-size:1.9rem;font-weight:700;
+    background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;
   }
-  .profit-badge.pos{background:rgba(34,197,94,.12);color:var(--success);}
-  .profit-badge.neg{background:rgba(255,77,109,.12);color:var(--danger);}
-  .profit-badge.zero{background:var(--surface2);color:var(--muted);}
+  .profit-preview{
+    font-size:.82rem;padding:4px 10px;border-radius:8px;font-weight:600;
+    font-family:'JetBrains Mono',monospace;
+  }
+  .profit-preview.pos{background:rgba(34,197,94,.1);color:var(--success);}
+  .profit-preview.neg{background:rgba(255,77,109,.1);color:var(--danger);}
+  .profit-preview.zero{background:var(--surface2);color:var(--muted);}
 
-  .sale-history-item{
+  .recent-bill-item{
     border-bottom:1px solid var(--border);padding:11px 0;
     display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;
   }
-  .sale-history-item:last-child{border-bottom:none;}
+  .recent-bill-item:last-child{border-bottom:none;}
 
-  .profit-summary-grid{
-    display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;
+  /* =========== PRINT BILL =========== */
+  #print-bill{display:none;}
+  @media print{
+    *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
+    body>*:not(#print-bill){display:none!important;}
+    #print-bill{display:block!important;margin:0;padding:0;}
+    @page{margin:10mm 12mm;size:A4;}
   }
-  .profit-card{
-    background:var(--surface);border:1px solid var(--border);
-    border-radius:12px;padding:18px 20px;
-    display:flex;flex-direction:column;gap:6px;
-  }
-  .profit-card .pc-label{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
-  .profit-card .pc-val{font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:700;}
-  .profit-card .pc-sub{font-size:.78rem;color:var(--muted);}
-
-  .filter-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
-  .disc-preview{font-size:.82rem;color:var(--success);margin-top:4px;display:none;}
+  .bill-doc{width:100%;max-width:700px;margin:0 auto;
+    font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;color:#111;background:#fff;}
+  .bill-doc-hdr{background:#1a2535;color:#fff;padding:20px 28px;border-bottom:3px solid #2d7a6a;}
+  .bill-doc-hdr-row{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;}
+  .bill-doc-name{font-size:20px;font-weight:700;letter-spacing:.3px;margin:0 0 3px;}
+  .bill-doc-sub{font-size:11px;opacity:.7;margin:0;}
+  .bill-doc-billno{font-size:17px;font-weight:700;}
+  .bill-doc-date{font-size:11px;opacity:.7;margin-top:2px;}
+  .bill-doc-info{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #d0d8e8;}
+  .bill-doc-info-box{padding:14px 20px;border-right:1px solid #d0d8e8;}
+  .bill-doc-info-box:last-child{border-right:none;}
+  .bill-doc-lbl{font-size:9px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.12em;color:#777;margin-bottom:5px;}
+  .bill-doc-val{font-size:13px;font-weight:600;color:#111;}
+  .bill-doc-detail{font-size:11px;color:#555;margin-top:2px;line-height:1.5;}
+  .bill-doc-tbl{width:100%;border-collapse:collapse;margin:0;}
+  .bill-doc-tbl thead tr{background:#1a2535;color:#fff;}
+  .bill-doc-tbl thead th{padding:9px 14px;text-align:left;font-size:11px;
+    font-weight:600;text-transform:uppercase;letter-spacing:.07em;}
+  .bill-doc-tbl thead th:nth-child(2),
+  .bill-doc-tbl thead th:nth-child(3),
+  .bill-doc-tbl thead th:nth-child(4){text-align:right;}
+  .bill-doc-tbl tbody tr{border-bottom:1px solid #eaeef5;}
+  .bill-doc-tbl tbody tr:nth-child(even){background:#f8fafc;}
+  .bill-doc-tbl tbody td{padding:9px 14px;font-size:12px;vertical-align:middle;}
+  .bill-doc-tbl tbody td:nth-child(2),
+  .bill-doc-tbl tbody td:nth-child(3),
+  .bill-doc-tbl tbody td:nth-child(4){text-align:right;}
+  .bill-doc-tbl tfoot tr{background:#1a2535;color:#fff;}
+  .bill-doc-tbl tfoot td{padding:11px 14px;font-size:13px;font-weight:700;}
+  .bill-doc-tbl tfoot td:last-child{text-align:right;font-size:16px;}
+  .bill-doc-footer{border-top:1px solid #d0d8e8;padding:16px 20px;}
+  .bill-doc-sig{display:flex;justify-content:space-between;
+    margin-top:36px;padding:0 10px;}
+  .bill-doc-sig-box{text-align:center;border-top:1px solid #aaa;
+    padding-top:6px;width:150px;font-size:10px;color:#666;}
+  .bill-doc-note{text-align:center;font-size:10px;color:#999;
+    margin-top:16px;border-top:1px dashed #ddd;padding-top:10px;}
+  .bill-doc-bottom{background:#1a2535;color:#8a9ab8;
+    padding:10px 20px;text-align:center;font-size:10px;}
 </style>
 </head>
 <body>
@@ -83,187 +133,137 @@
   <div class="navbar-nav">
     <a href="dashboard.html" class="nav-link">&#127968; <span class="nav-text">Home</span></a>
     <a href="add-stock.html" class="nav-link">&#10133; <span class="nav-text">Add Stock</span></a>
-    <a href="stock-sale.html" class="nav-link active">&#128200; <span class="nav-text">Stock Sale</span></a>
     <a href="view-stock.html" class="nav-link">&#128230; <span class="nav-text">View Stock</span></a>
-    <a href="billing.html" class="nav-link">&#128451; <span class="nav-text">Bill Generation</span></a>
+    <a href="stock-sale.html" class="nav-link">&#128200; <span class="nav-text">Stock Sale</span></a>
+    <a href="billing.html" class="nav-link active">&#128451; <span class="nav-text">Bill Generation</span></a>
     <a href="scan-stock.html" class="nav-link">&#128247; <span class="nav-text">Scan Stock</span></a>
     <a href="alerts.html" class="nav-link">&#128276; <span class="nav-text">Alerts</span>
       <span class="badge" id="alert-badge" style="display:none">0</span></a>
   </div>
   <div class="navbar-right">
-    <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">&#127769;</button>
+    <button class="theme-btn" id="theme-btn" onclick="toggleTheme()">&#127769;</button>
     <button class="logout-btn" onclick="logout()">Logout</button>
   </div>
 </nav>
 
-<!-- SUCCESS POPUP -->
-<div class="popup-overlay" id="sale-success-popup">
-  <div class="popup-box">
-    <div class="popup-icon">&#10003;</div>
-    <div class="popup-title">Sale Recorded!</div>
-    <div class="popup-msg" id="sale-success-msg"></div>
+<!-- SUCCESS MODAL -->
+<div class="modal-overlay" id="success-modal">
+  <div class="modal" style="max-width:460px;text-align:center;">
+    <div style="font-size:48px;margin-bottom:12px;">&#10003;</div>
+    <h3 style="margin-bottom:10px;">Bill Generated!</h3>
+    <p style="color:var(--muted);margin:0 0 24px;line-height:1.7;" id="success-msg"></p>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-      <button class="btn btn-primary" onclick="closeSaleSuccess()">OK</button>
+      <button class="btn btn-primary" onclick="printCurrentBill()">Print / Save PDF</button>
+      <button class="btn btn-secondary" onclick="closeSuccess()">New Bill</button>
     </div>
   </div>
 </div>
 
+<!-- PRINT TARGET -->
+<div id="print-bill"></div>
+
 <div class="page">
 <div class="container">
-
   <div class="page-header">
-    <h1>Stock Sale</h1>
-    <p>Record stock sold from inventory. Profit is calculated from your cost price, not MRP.</p>
+    <h1>Bill Generation</h1>
+    <p>Bills use MRP as selling price. Profit is calculated vs your cost price and saved automatically.</p>
   </div>
 
-  <div id="sale-sync-banner"></div>
+  <div id="bill-sync-banner"></div>
 
-  <!-- Profit Summary Cards -->
-  <div class="profit-summary-grid" id="profit-summary">
-    <!-- built by JS -->
-  </div>
-
-  <div class="sale-layout">
-    <!-- LEFT: SALE FORM -->
+  <div class="bill-layout">
+    <!-- LEFT: FORM -->
     <div>
-      <div class="card">
-        <div class="card-header"><span class="card-title">Record a Sale</span></div>
+      <!-- Patient details -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">Patient Details</span></div>
         <div class="card-body">
-
           <div class="form-grid form-grid-2">
-
-            <!-- Medicine selector -->
-            <div class="field" style="grid-column:1/-1;position:relative;">
-              <label>Medicine *</label>
-              <input type="text" id="s-medicine-search" class="med-search-input" placeholder="Search medicine by name or brand..."
-                autocomplete="off" oninput="onMedSearchInputSale(this)" onfocus="onMedSearchFocusSale(this)"
-                onblur="onMedSearchBlurSale(this)"/>
-              <input type="hidden" id="s-medicine" value=""/>
-              <div class="med-search-results" id="s-medicine-results"></div>
-              <p class="hint" id="s-stock-hint"></p>
-            </div>
-
-            <!-- Quantity Type (read from stock) -->
             <div class="field">
-              <label>Quantity Type</label>
-              <input type="text" id="s-qtyType" readonly
-                style="background:var(--surface2);opacity:.7;cursor:not-allowed;"/>
+              <label>Patient Name *</label>
+              <input type="text" id="b-name" placeholder="Full name"/>
             </div>
-
-            <!-- Sell As: whole unit or individual unit (only shown when medicine has units-per-pack configured) -->
-            <div class="field" id="sell-as-wrap" style="display:none;">
-              <label>Sell As</label>
-              <select id="s-sellAs" onchange="onSellAsChange()">
-                <option value="strip">Strip</option>
-                <option value="tablet">Tablet</option>
-              </select>
-            </div>
-
-            <!-- Quantity sold -->
             <div class="field">
-              <label>Quantity Sold *</label>
-              <input type="number" id="s-qty" min="1" placeholder="0"
-                oninput="recalcSale()"/>
+              <label>Phone Number *</label>
+              <input type="tel" id="b-phone" placeholder="+91 XXXXX XXXXX"/>
             </div>
-
-            <!-- Discount % -->
             <div class="field">
-              <label>Discount % on MRP</label>
-              <input type="number" id="s-discount" min="0" max="100" step="0.1"
-                placeholder="0" oninput="recalcSale()"/>
-              <p class="hint disc-preview" id="disc-preview"></p>
+              <label>Patient Email</label>
+              <input type="email" id="b-email" placeholder="patient@email.com"/>
             </div>
-
-            <!-- Date -->
             <div class="field">
-              <label>Sale Date</label>
-              <input type="date" id="s-date" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:9px 12px;font-family:'DM Sans',sans-serif;font-size:.9rem;"/>
+              <label>Age *</label>
+              <input type="number" id="b-age" min="1" max="120" placeholder="Years"/>
             </div>
-
+            <div class="field">
+              <label>Bill Date</label>
+              <input type="date" id="b-date"/>
+            </div>
+            <div class="field">
+              <label>Doctor / Prescribed By</label>
+              <input type="text" id="b-doctor" placeholder="Dr. Name (optional)"/>
+            </div>
           </div>
+        </div>
+      </div>
 
-          <!-- Price breakdown -->
-          <div class="price-breakdown" id="price-breakdown" style="display:none;">
-            <p style="font-size:.78rem;font-weight:700;color:var(--muted);
-              text-transform:uppercase;letter-spacing:.09em;margin-bottom:10px;">
-              Price Breakdown
-            </p>
+      <!-- Medicines -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Medicines</span>
+          <button class="btn btn-sm btn-secondary" onclick="addBillRow()">+ Add Row</button>
+        </div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:2fr 80px 110px 34px;gap:10px;
+            padding:0 0 8px;font-size:.71rem;font-weight:600;color:var(--muted);
+            text-transform:uppercase;letter-spacing:.06em;">
+            <span>Medicine (MRP auto-filled, Sell As shown if sub-units configured)</span>
+            <span>Qty</span>
+            <span>Unit Price (Rs)</span>
+            <span></span>
+          </div>
+          <div id="bill-items-area"></div>
 
-            <div class="pb-row">
-              <span class="label">Cost Price / Unit</span>
-              <span class="value" id="pb-cost-unit" style="color:var(--warn);">Rs. 0.00</span>
+          <!-- Totals bar -->
+          <div class="bill-total-bar">
+            <div>
+              <div style="font-size:.75rem;color:var(--muted);font-weight:600;
+                text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">
+                Total (MRP basis)
+              </div>
+              <div class="total-amount" id="total-display">Rs. 0.00</div>
             </div>
-            <div class="pb-row">
-              <span class="label">MRP / Unit</span>
-              <span class="value" id="pb-mrp-unit" style="color:var(--accent2);">Rs. 0.00</span>
-            </div>
-            <div class="pb-row">
-              <span class="label">Discount on MRP</span>
-              <span class="value" id="pb-discount">0 %</span>
-            </div>
-            <div class="pb-row">
-              <span class="label">Selling Price / Unit (after discount)</span>
-              <span class="value" id="pb-sell-unit">Rs. 0.00</span>
-            </div>
-            <div class="pb-row">
-              <span class="label">Quantity</span>
-              <span class="value" id="pb-qty">0</span>
-            </div>
-            <div class="pb-row total-row">
-              <span class="label">Total Selling Price</span>
-              <span class="value" id="pb-total-sell">Rs. 0.00</span>
-            </div>
-            <div class="pb-row total-row">
-              <span class="label">Total Cost Price</span>
-              <span class="value" style="color:var(--warn);" id="pb-total-cost">Rs. 0.00</span>
-            </div>
-            <div class="pb-row profit-row" id="pb-profit-row">
-              <span class="label">Profit on this Sale</span>
-              <span class="value" id="pb-profit">Rs. 0.00</span>
+            <div style="text-align:right;display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+              <span style="font-size:.78rem;color:var(--muted);" id="items-count">0 items</span>
+              <span class="profit-preview zero" id="profit-preview">Profit: Rs. 0.00</span>
             </div>
           </div>
 
-          <div class="flex-end" style="margin-top:18px;">
-            <button class="btn btn-secondary" onclick="resetSaleForm()">Reset</button>
-            <button class="btn btn-primary" onclick="submitSale()">Record Sale</button>
+          <div class="flex-end" style="margin-top:16px;">
+            <button class="btn btn-secondary" onclick="resetBill()">Reset</button>
+            <button class="btn btn-primary" onclick="submitBill()">Generate Bill</button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- RIGHT: SALE HISTORY -->
+    <!-- RIGHT: RECENT BILLS -->
     <div>
       <div class="card" style="position:sticky;top:84px;">
         <div class="card-header">
-          <span class="card-title">Sale History</span>
-          <span id="sale-count" style="color:var(--muted);font-size:.8rem;"></span>
+          <span class="card-title">Recent Bills</span>
+          <span id="bill-count" style="color:var(--muted);font-size:.8rem;">0 total</span>
         </div>
-        <div class="card-body">
-          <!-- Filter row -->
-          <div class="filter-row">
-            <select id="hist-filter" onchange="renderHistory()"
-              style="background:var(--surface2);border:1px solid var(--border);
-              border-radius:8px;color:var(--text);padding:7px 12px;font-family:'DM Sans',sans-serif;font-size:.83rem;">
-              <option value="today">Today</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="all">All Time</option>
-            </select>
-            <button class="btn btn-sm btn-secondary" onclick="downloadSalesCSV()">
-              Download CSV
-            </button>
-          </div>
-          <div id="sale-history-list" style="max-height:500px;overflow-y:auto;">
-            <div class="empty-state">
-              <div class="empty-icon" style="font-size:36px;">&#128200;</div>
-              <p>No sales recorded yet.</p>
-            </div>
+        <div class="card-body" id="recent-bills-list"
+          style="max-height:600px;overflow-y:auto;padding-top:6px;">
+          <div class="empty-state">
+            <div class="empty-icon" style="font-size:36px;">&#128203;</div>
+            <p>No bills yet.</p>
           </div>
         </div>
       </div>
     </div>
   </div>
-
 </div>
 </div>
 
@@ -272,7 +272,7 @@
 RP.guard();
 RP.applyTheme();
 
-// ---- Local date helper (avoids UTC timezone shift) ----
+// ---- Local date helper ----
 function localDateStr(d){
   var dt=d?new Date(d):new Date();
   var y=dt.getFullYear();
@@ -298,20 +298,17 @@ function updateBadge(){
 }
 updateBadge();
 
-function esc(s){
-  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+window._rpOnSyncComplete=function(){ renderRecentBills(); };
+RP.showSyncBanner('bill-sync-banner');
 
-window._rpOnSyncComplete=function(){ renderProfitSummary(); renderHistory(); };
-RP.showSyncBanner('sale-sync-banner');
+document.getElementById('b-date').value=localDateStr();
 
-// Set today's date
-document.getElementById('s-date').value=localDateStr();
+var billRowIds=[];
+var currentBillData=null;
 
-/* ============================================================
-   MEDICINE SEARCH
-============================================================ */
-function buildMedListSale(){
+/* ---- Medicine dropdown options ---- */
+/* ---- Build a flat, searchable list of in-stock medicines ---- */
+function buildMedList(){
   return RP.getStock()
     .filter(function(s){ return parseFloat(s.quantity)>0; })
     .map(function(s){
@@ -328,8 +325,9 @@ function buildMedListSale(){
     });
 }
 
-function searchMedsSale(query){
-  var list=buildMedListSale();
+/* ---- Search: name/brand starting-with matches first, then anywhere-contains ---- */
+function searchMeds(query){
+  var list=buildMedList();
   if(!query) return list.slice(0,40);
   var q=query.trim().toLowerCase();
   if(!q) return list.slice(0,40);
@@ -345,19 +343,19 @@ function searchMedsSale(query){
   return starts.concat(contains).slice(0,40);
 }
 
-function renderMedResultsSale(query){
-  var resultsEl=document.getElementById('s-medicine-results');
-  var matches=searchMedsSale(query);
+function renderMedResults(row, query){
+  var resultsEl=row.querySelector('.med-search-results');
+  var matches=searchMeds(query);
   if(!matches.length){
     resultsEl.innerHTML='<div class="med-result-empty">No matching stock found.</div>';
   } else {
     resultsEl.innerHTML=matches.map(function(m){
-      var costTxt=m.cost>0?'Cost:Rs.'+m.cost.toFixed(2):'';
+      var mrpTxt=m.mrp>0?'MRP:Rs.'+m.mrp.toFixed(2):'';
       var subTxt=m.tps>0?(' | '+m.tps+'/'+m.qtyType.replace(/s$/,'')):'';
-      return '<div class="med-result-item" data-id="'+m.id+'" onmousedown="selectMedResultSale(this)">'+
+      return '<div class="med-result-item" data-id="'+m.id+'" onmousedown="selectMedResult(this)">'+
         '<div class="med-result-name">'+esc(m.name)+
           (m.brand?' <span class="med-result-brand">('+esc(m.brand)+')</span>':'')+'</div>'+
-        '<div class="med-result-meta">'+m.qty+' '+esc(m.qtyType)+(costTxt?' | '+costTxt:'')+subTxt+'</div>'+
+        '<div class="med-result-meta">'+m.qty+' '+esc(m.qtyType)+(mrpTxt?' | '+mrpTxt:'')+subTxt+'</div>'+
       '</div>';
     }).join('');
   }
@@ -365,419 +363,465 @@ function renderMedResultsSale(query){
   resultsEl.style.display='block';
 }
 
-function onMedSearchInputSale(input){
-  document.getElementById('s-medicine').value='';
-  renderMedResultsSale(input.value);
-  onMedicineSelect();
+function onMedSearchInput(input){
+  var row=input.closest('.bill-item-row');
+  row.querySelector('.med-id-input').value='';
+  row.querySelector('.sell-as-select').style.display='none';
+  renderMedResults(row, input.value);
+  updateTotals();
 }
-function onMedSearchFocusSale(input){
-  renderMedResultsSale(input.value);
+function onMedSearchFocus(input){
+  renderMedResults(input.closest('.bill-item-row'), input.value);
 }
-function onMedSearchBlurSale(input){
+function onMedSearchBlur(input){
+  var row=input.closest('.bill-item-row');
   setTimeout(function(){
-    var el=document.getElementById('s-medicine-results');
+    var el=row.querySelector('.med-search-results');
     el.classList.remove('open'); el.style.display='none';
   }, 150);
 }
-function selectMedResultSale(el){
+function selectMedResult(el){
   var id=el.getAttribute('data-id');
-  var m=buildMedListSale().find(function(x){return x.id===id;});
+  var row=el.closest('.bill-item-row');
+  var m=buildMedList().find(function(x){return x.id===id;});
   if(!m) return;
-  document.getElementById('s-medicine-search').value=m.name+(m.brand?' ('+m.brand+')':'');
-  document.getElementById('s-medicine').value=m.id;
-  var el2=document.getElementById('s-medicine-results');
-  el2.classList.remove('open'); el2.style.display='none';
-  onMedicineSelect();
+  var input=row.querySelector('.med-search-input');
+  input.value=m.name+(m.brand?' ('+m.brand+')':'');
+  row.querySelector('.med-id-input').value=m.id;
+  var resultsEl=row.querySelector('.med-search-results');
+  resultsEl.classList.remove('open'); resultsEl.style.display='none';
+  onMedSelect(row);
 }
 
-/* ============================================================
-   MEDICINE SELECTED
-============================================================ */
-function onMedicineSelect(){
-  var id=document.getElementById('s-medicine').value;
-  var sellAsWrap=document.getElementById('sell-as-wrap');
+/* ---- Add a medicine row ---- */
+function addBillRow(){
+  if(!buildMedList().length){ RP.toast('No stock available. Add stock first.','warn'); return; }
+  var id='br_'+RP.uid();
+  billRowIds.push(id);
+  var div=document.createElement('div');
+  div.className='bill-item-row';
+  div.id=id;
+  div.innerHTML=
+    '<div class="field med-sel-wrap" style="min-width:0;position:relative;">'+
+      '<input type="text" class="med-search-input" placeholder="Search medicine by name or brand..."'+
+        ' autocomplete="off" oninput="onMedSearchInput(this)" onfocus="onMedSearchFocus(this)" onblur="onMedSearchBlur(this)"'+
+        ' style="font-size:.85rem;padding:9px 10px;"/>'+
+      '<input type="hidden" class="med-id-input" value=""/>'+
+      '<div class="med-search-results"></div>'+
+      '<select class="sell-as-select" onchange="onSellAsChange(this)">'+
+        '<option value="strip">Sell as whole unit</option>'+
+        '<option value="tablet">Sell as sub-unit</option>'+
+      '</select>'+
+    '</div>'+
+    '<div class="field" style="min-width:0;">'+
+      '<input type="number" min="1" value="" placeholder="0"'+
+        ' oninput="checkMaxQty(this);updateTotals()" style="font-size:.85rem;padding:9px 10px;"/>'+
+    '</div>'+
+    '<div class="field" style="min-width:0;">'+
+      '<input type="number" min="0" step="0.01" placeholder="0.00"'+
+        ' oninput="updateTotals()" style="font-size:.85rem;padding:9px 10px;"/>'+
+    '</div>'+
+    '<button class="remove-btn" onclick="removeRow(\''+id+'\')" title="Remove">&#10005;</button>';
+  div.dataset.sellAs='strip';
+  document.getElementById('bill-items-area').appendChild(div);
+  updateTotals();
+}
+
+/* ---- When medicine is selected — show/hide "Sell As" and auto-fill price ---- */
+function onMedSelect(row){
+  var idInput=row.querySelector('.med-id-input');
+  var sellAsSel=row.querySelector('.sell-as-select');
+  var id=idInput.value;
   if(!id){
-    document.getElementById('s-qtyType').value='';
-    document.getElementById('s-stock-hint').textContent='';
-    document.getElementById('price-breakdown').style.display='none';
-    sellAsWrap.style.display='none';
+    sellAsSel.style.display='none';
     return;
   }
-  var m=buildMedListSale().find(function(x){return x.id===id;});
-  if(!m){
-    document.getElementById('s-qtyType').value='';
-    document.getElementById('s-stock-hint').textContent='';
-    document.getElementById('price-breakdown').style.display='none';
-    sellAsWrap.style.display='none';
-    return;
-  }
+  var m=buildMedList().find(function(x){return x.id===id;});
+  if(!m){ sellAsSel.style.display='none'; return; }
   if(m.tps>0){
-    var sellAsSel=document.getElementById('s-sellAs');
     sellAsSel.innerHTML=
-      '<option value="strip">Whole '+m.qtyType.replace(/s$/,'')+'</option>'+
-      '<option value="tablet">Individual Units</option>';
-    sellAsWrap.style.display='block';
+      '<option value="strip">Sell as whole '+m.qtyType.replace(/s$/,'')+'</option>'+
+      '<option value="tablet">Sell as individual units</option>';
+    sellAsSel.style.display='block';
     sellAsSel.value='strip';
   } else {
-    sellAsWrap.style.display='none';
+    sellAsSel.style.display='none';
   }
-  updateQtyTypeDisplay();
-  document.getElementById('s-qty').value='';
-  recalcSale();
+  applySellUnit(row);
 }
 
 /* ---- When "Sell As" (whole unit / individual unit) changes ---- */
-function onSellAsChange(){
-  updateQtyTypeDisplay();
-  document.getElementById('s-qty').value='';
-  recalcSale();
+function onSellAsChange(sel){
+  var row=sel.closest('.bill-item-row');
+  applySellUnit(row);
 }
 
-/* ---- Update the read-only Quantity Type box + stock hint based on chosen sell unit ---- */
-function updateQtyTypeDisplay(){
-  var id=document.getElementById('s-medicine').value;
+/* ---- Apply the chosen selling unit: sets max qty + auto-fills unit price ---- */
+function applySellUnit(row){
+  var idInput=row.querySelector('.med-id-input');
+  var id=idInput.value;
   if(!id) return;
-  var m=buildMedListSale().find(function(x){return x.id===id;});
+  var m=buildMedList().find(function(x){return x.id===id;});
   if(!m) return;
-  var sellAs=(m.tps>0)?document.getElementById('s-sellAs').value:'strip';
+  var sellAsSel=row.querySelector('.sell-as-select');
+  var sellAs=(sellAsSel&&sellAsSel.style.display!=='none')?sellAsSel.value:'strip';
+  var inputs=row.querySelectorAll('input[type="number"]');
+  var qtyInput=inputs[0];
+  var priceInput=inputs[1];
 
   if(sellAs==='tablet'&&m.tps>0){
     var availTablets=Math.floor(m.qty*m.tps);
-    document.getElementById('s-qtyType').value='Units';
-    document.getElementById('s-stock-hint').textContent=
-      'Available: '+availTablets+' units (from '+m.qty+' '+m.qtyType+')'+
-      (m.costTablet>0?' | Cost price: Rs.'+m.costTablet.toFixed(2)+' per unit':'');
-    document.getElementById('s-qty').max=availTablets;
+    qtyInput.max=availTablets;
+    qtyInput.title='Max: '+availTablets+' individual units';
+    priceInput.value=(m.mrpTablet>0?m.mrpTablet:(m.tps>0?m.mrp/m.tps:0)).toFixed(2);
   } else {
-    document.getElementById('s-qtyType').value=m.qtyType;
-    document.getElementById('s-stock-hint').textContent=
-      'Available: '+m.qty+' '+m.qtyType+
-      (m.cost>0?' | Cost price: Rs.'+m.cost.toFixed(2)+' per '+m.qtyType.replace(/s$/,''):'');
-    document.getElementById('s-qty').max=m.qty;
+    qtyInput.max=m.qty;
+    qtyInput.title='Max: '+m.qty+' '+m.qtyType;
+    priceInput.value=m.mrp>0?m.mrp.toFixed(2):'';
   }
+  row.dataset.sellAs=sellAs;
+  updateTotals();
 }
 
-/* ============================================================
-   RECALCULATE on input change
-============================================================ */
-function recalcSale(){
-  var id=document.getElementById('s-medicine').value;
-  if(!id){
-    document.getElementById('price-breakdown').style.display='none';
-    return;
-  }
-  var m=buildMedListSale().find(function(x){return x.id===id;});
-  if(!m){
-    document.getElementById('price-breakdown').style.display='none';
-    return;
-  }
-
-  var sellAs   = (m.tps>0)?document.getElementById('s-sellAs').value:'strip';
-
-  var costPerUnit, mrpPerUnit, availQty;
-  if(sellAs==='tablet'&&m.tps>0){
-    costPerUnit = m.costTablet;
-    mrpPerUnit  = m.mrpTablet;
-    availQty    = Math.floor(m.qty*m.tps);
-  } else {
-    costPerUnit = m.cost;
-    mrpPerUnit  = m.mrp;
-    availQty    = m.qty;
-  }
-
-  var qty            = parseFloat(document.getElementById('s-qty').value)||0;
-  var discPct        = parseFloat(document.getElementById('s-discount').value)||0;
-
-  // Enforce max qty
-  if(qty>availQty){
-    document.getElementById('s-qty').value=availQty;
-    qty=availQty;
-    RP.toast('Max available stock is '+availQty,'warn');
-  }
-
-  // If MRP is 0, use cost price as MRP (fallback for items added without pricing)
-  var effectiveMrp = mrpPerUnit>0 ? mrpPerUnit : costPerUnit;
-
-  // Selling price = MRP - discount%
-  var discAmt        = effectiveMrp * (discPct/100);
-  var sellPerUnit    = effectiveMrp - discAmt;
-  var totalSell      = sellPerUnit * qty;
-  var totalCost      = costPerUnit * qty;
-  var profit         = totalSell - totalCost;
-
-  // Discount preview
-  var discPreview=document.getElementById('disc-preview');
-  if(discPct>0&&effectiveMrp>0){
-    discPreview.style.display='block';
-    discPreview.textContent='Discount: Rs.'+discAmt.toFixed(2)+
-      ' per unit → Selling at Rs.'+sellPerUnit.toFixed(2);
-  } else {
-    discPreview.style.display='none';
-  }
-
-  // Update breakdown
-  document.getElementById('price-breakdown').style.display='block';
-  document.getElementById('pb-cost-unit').textContent  = 'Rs. '+costPerUnit.toFixed(2);
-  document.getElementById('pb-mrp-unit').textContent   = 'Rs. '+effectiveMrp.toFixed(2);
-  document.getElementById('pb-discount').textContent   = discPct.toFixed(1)+' %';
-  document.getElementById('pb-sell-unit').textContent  = 'Rs. '+sellPerUnit.toFixed(2);
-  document.getElementById('pb-qty').textContent        = qty+' unit(s)';
-  document.getElementById('pb-total-sell').textContent = 'Rs. '+totalSell.toFixed(2);
-  document.getElementById('pb-total-cost').textContent = 'Rs. '+totalCost.toFixed(2);
-  document.getElementById('pb-profit').textContent     = (profit>=0?'+ ':'- ')+'Rs. '+Math.abs(profit).toFixed(2);
-
-  var profitRow=document.getElementById('pb-profit-row');
-  profitRow.classList.toggle('loss', profit<0);
+function checkMaxQty(input){
+  var max=parseInt(input.max)||99999;
+  var val=parseInt(input.value)||0;
+  if(val>max){ input.value=max; RP.toast('Max available: '+max,'warn'); }
+  if(val<1) input.value=1;
 }
 
-/* ============================================================
-   SUBMIT SALE
-============================================================ */
-function submitSale(){
-  var id=document.getElementById('s-medicine').value;
-  if(!id){ RP.toast('Select a medicine.','error'); return; }
-  var m=buildMedListSale().find(function(x){return x.id===id;});
-  if(!m){ RP.toast('Select a medicine.','error'); return; }
+function removeRow(id){
+  billRowIds=billRowIds.filter(function(r){return r!==id;});
+  var el=document.getElementById(id);
+  if(el) el.remove();
+  updateTotals();
+}
 
-  var qty=parseFloat(document.getElementById('s-qty').value)||0;
-  if(qty<=0){ RP.toast('Enter quantity sold.','error'); return; }
+/* ---- Calculate totals AND profit preview ---- */
+function updateTotals(){
+  var total=0, profit=0, count=0;
+  var medMap={}; buildMedList().forEach(function(m){ medMap[m.id]=m; });
+  document.querySelectorAll('.bill-item-row').forEach(function(row){
+    var idInput=row.querySelector('.med-id-input');
+    var id=idInput?idInput.value:'';
+    var inputs=row.querySelectorAll('input[type="number"]');
+    var qty=parseFloat(inputs[0]?inputs[0].value:0)||0;
+    var price=parseFloat(inputs[1]?inputs[1].value:0)||0;
+    if(id&&medMap[id]&&qty>0){
+      count++;
+      var lineTotal=qty*price;
+      total+=lineTotal;
+      // Profit = (selling price - cost price) * qty — cost basis depends on Sell As (strip/tablet)
+      var m=medMap[id];
+      var sellAs=row.dataset.sellAs||'strip';
+      var costPerUnit=(sellAs==='tablet'&&m.tps>0)?m.costTablet:m.cost;
+      profit+=(price-costPerUnit)*qty;
+    }
+  });
+  document.getElementById('total-display').textContent='Rs. '+total.toFixed(2);
+  document.getElementById('items-count').textContent=count+' item'+(count!==1?'s':'');
+  // Profit preview
+  var pp=document.getElementById('profit-preview');
+  pp.textContent='Profit: '+(profit>=0?'+':'')+'Rs. '+profit.toFixed(2);
+  pp.className='profit-preview '+(profit>0?'pos':profit<0?'neg':'zero');
+}
 
-  var sellAs = (m.tps>0)?document.getElementById('s-sellAs').value:'strip';
+/* ---- Get all bill items ---- */
+function getBillItems(){
+  var items=[];
+  var medMap={}; buildMedList().forEach(function(m){ medMap[m.id]=m; });
+  document.querySelectorAll('.bill-item-row').forEach(function(row){
+    var idInput=row.querySelector('.med-id-input');
+    var id=idInput?idInput.value:'';
+    var inputs=row.querySelectorAll('input[type="number"]');
+    var qty=parseFloat(inputs[0]?inputs[0].value:0)||0;
+    var price=parseFloat(inputs[1]?inputs[1].value:0)||0;
+    if(!id||!medMap[id]||qty<=0) return;
+    var m=medMap[id];
+    var sellAs=row.dataset.sellAs||'strip';
+    var costPerUnit, unitLabel, stockDeduct;
+    if(sellAs==='tablet'&&m.tps>0){
+      costPerUnit=m.costTablet;
+      unitLabel='Units';
+      stockDeduct=qty/m.tps;               // fraction of a pack (strip/bottle/vial/box...)
+    } else {
+      costPerUnit=m.cost;
+      unitLabel=m.qtyType;
+      stockDeduct=qty;
+    }
+    items.push({
+      medId:    id,
+      qty:      qty,
+      soldAs:   sellAs,
+      stockDeduct: stockDeduct,          // amount to subtract from stock (in stock's native qtyType units)
+      cost:     price,      // selling price (MRP based) used for bill total
+      subtotal: parseFloat((qty*price).toFixed(2)),
+      medName:  m.name,
+      medBrand: m.brand,
+      medType:  m.medType,
+      qtyType:  unitLabel,
+      // Cost price (for profit only — not shown on bill)
+      costPricePerUnit: costPerUnit,
+      profitOnLine: parseFloat(((price-costPerUnit)*qty).toFixed(2))
+    });
+  });
+  return items;
+}
 
-  var costPerUnit, mrpPerUnit, unitLabel, stockDeduct;
-  if(sellAs==='tablet'&&m.tps>0){
-    costPerUnit = m.costTablet;
-    mrpPerUnit  = m.mrpTablet;
-    unitLabel   = 'Units';
-    stockDeduct = qty/m.tps;               // fraction of a pack (strip/bottle/vial/box...)
-  } else {
-    costPerUnit = m.cost;
-    mrpPerUnit  = m.mrp;
-    unitLabel   = m.qtyType;
-    stockDeduct = qty;
+/* ---- Submit bill ---- */
+function submitBill(){
+  var name   = document.getElementById('b-name').value.trim();
+  var phone  = document.getElementById('b-phone').value.trim();
+  var email  = document.getElementById('b-email').value.trim();
+  var age    = document.getElementById('b-age').value.trim();
+  var date   = document.getElementById('b-date').value;
+  var doctor = document.getElementById('b-doctor').value.trim();
+  var items  = getBillItems();
+
+  if(!name)  { RP.toast('Enter patient name.','error'); return; }
+  if(!phone) { RP.toast('Enter patient phone number.','error'); return; }
+  if(!age)   { RP.toast('Enter patient age.','error'); return; }
+  if(!items.length) { RP.toast('Add at least one medicine.','error'); return; }
+  if(items.some(function(i){return i.cost<=0;})){
+    RP.toast('Enter price for all medicines.','error'); return;
   }
 
-  var discPct       = parseFloat(document.getElementById('s-discount').value)||0;
-  var effectiveMrp  = mrpPerUnit>0?mrpPerUnit:costPerUnit;
-  var sellPerUnit   = effectiveMrp*(1-(discPct/100));
-  var totalSell     = sellPerUnit*qty;
-  var totalCost     = costPerUnit*qty;
-  var profit        = totalSell-totalCost;
-  var dateInput     = document.getElementById('s-date').value;
-  // Always use local date — never let it be empty or UTC-shifted
-  var date          = (dateInput && dateInput.length >= 10) ? dateInput.slice(0,10) : localDateStr();
+  var total      = parseFloat(items.reduce(function(s,i){return s+i.subtotal;},0).toFixed(2));
+  var totalProfit= parseFloat(items.reduce(function(s,i){return s+i.profitOnLine;},0).toFixed(2));
+  var billNo     = 'RP-'+new Date().getFullYear()+'-'+String(RP.getBills().length+1).padStart(4,'0');
 
-  var sale={
-    id:           RP.uid(),
-    stockId:      m.id,
-    medicineName: m.name,
-    qtyType:      unitLabel,
-    soldAs:       sellAs,
-    qtySold:      qty,
-    costPricePerUnit:   costPerUnit,
-    mrpPerUnit:         effectiveMrp,
-    discountPct:        discPct,
-    sellingPricePerUnit:sellPerUnit,
-    totalCost:          parseFloat(totalCost.toFixed(2)),
-    totalSelling:       parseFloat(totalSell.toFixed(2)),
-    profit:             parseFloat(profit.toFixed(2)),
-    date:         date,
-    createdOn:    new Date().toISOString()
+  var bill={
+    id:          RP.uid(),
+    billNo:      billNo,
+    patientName: name,
+    patientPhone:phone,
+    patientEmail:email,
+    age:         age,
+    date:        date,
+    doctor:      doctor,
+    items:       items,
+    total:       total,
+    totalProfit: totalProfit,
+    createdOn:   new Date().toISOString()
   };
 
-  // We deduct stock ourselves below (supports fractional strip deduction
-  // when sold as loose tablets), so tell RP_SALES.add to skip its own deduction.
-  RP_SALES.add(sale, true);
+  // ── 1. Save bill ──
+  var bills=RP.getBills();
+  bills.push(bill);
+  RP.saveBills(bills);
 
+  // ── 2. Deduct stock (handles fractional strip deduction when sold as loose tablets) ──
   var stock=RP.getStock();
-  var sIdx=stock.findIndex(function(x){return x.id===sale.stockId;});
-  if(sIdx!==-1){
-    stock[sIdx].quantity=Math.max(0,parseFloat(((parseFloat(stock[sIdx].quantity)||0)-stockDeduct).toFixed(3)));
-    RP.saveStock(stock);
-    RP.postToSheet({action:'updateStock', data:stock[sIdx]});
+  items.forEach(function(item){
+    var idx=stock.findIndex(function(s){return s.id===item.medId;});
+    if(idx!==-1){
+      var deduct=(item.stockDeduct!==undefined)?item.stockDeduct:item.qty;
+      stock[idx].quantity=Math.max(0,parseFloat(((parseFloat(stock[idx].quantity)||0)-deduct).toFixed(3)));
+    }
+  });
+  RP.saveStock(stock);
+
+  // ── 3. Record EACH item as a sale entry in RP_SALES for profit tracking ──
+  if(typeof RP_SALES !== 'undefined'){
+    items.forEach(function(item){
+      var saleEntry={
+        id:                RP.uid(),
+        stockId:           item.medId,
+        medicineName:      item.medName,
+        qtyType:           item.qtyType,
+        qtySold:           item.qty,
+        costPricePerUnit:  item.costPricePerUnit,
+        mrpPerUnit:        item.cost,        // the price charged on bill
+        sellingPricePerUnit:item.cost,
+        discountPct:       0,
+        totalCost:         parseFloat((item.costPricePerUnit*item.qty).toFixed(2)),
+        totalSelling:      item.subtotal,
+        profit:            item.profitOnLine,
+        date:              date||localDateStr(),
+        createdOn:         new Date().toISOString(),
+        source:            'billing'         // distinguishes from direct stock sale
+      };
+      RP_SALES.add(saleEntry, true); // billing already deducted stock above
+    });
   }
 
-  document.getElementById('sale-success-msg').innerHTML=
-    '<strong>'+sale.medicineName+'</strong><br>'+
-    qty+' '+sale.qtyType+' sold at Rs.'+sellPerUnit.toFixed(2)+' each<br>'+
-    'Total: Rs.'+totalSell.toFixed(2)+'<br>'+
-    '<span style="color:'+(profit>=0?'var(--success)':'var(--danger)')+';">'+
-    'Profit: '+(profit>=0?'+':'')+'Rs.'+profit.toFixed(2)+'</span>';
-  document.getElementById('sale-success-popup').classList.add('open');
+  // ── 4. Sync to Google Sheets ──
+  RP.postToSheet({action:'addBill', data:bill});
 
-  renderProfitSummary();
-  renderHistory();
+  // ── 5. Build print bill ──
+  currentBillData=bill;
+  buildPrintBill(bill);
+
+  var profitLine='<br><span style="font-size:.8rem;color:'+(totalProfit>=0?'var(--success)':'var(--danger)')+';">'+
+    'Profit on this bill: '+(totalProfit>=0?'+':'')+'Rs.'+totalProfit.toFixed(2)+'</span>';
+  var emailLine=email?'<br><span style="font-size:.78rem;color:var(--muted)">Sending bill to: '+email+'</span>':'';
+
+  document.getElementById('success-msg').innerHTML=
+    'Bill <strong>'+billNo+'</strong> for <strong>'+name+'</strong><br>'+
+    'Phone: '+phone+'<br>'+
+    'Total: <strong style="color:var(--accent)">Rs. '+total.toFixed(2)+'</strong>'+
+    profitLine+emailLine;
+
+  document.getElementById('success-modal').classList.add('open');
+  renderRecentBills();
   updateBadge();
+  RP.toast('Bill saved. Stock reduced. Profit recorded.','success');
 }
 
-function closeSaleSuccess(){
-  document.getElementById('sale-success-popup').classList.remove('open');
-  resetSaleForm();
+function closeSuccess(){
+  document.getElementById('success-modal').classList.remove('open');
+  resetBill();
 }
 
-function resetSaleForm(){
-  document.getElementById('s-medicine').value='';
-  document.getElementById('s-medicine-search').value='';
-  document.getElementById('s-qtyType').value='';
-  document.getElementById('s-sellAs').value='strip';
-  document.getElementById('sell-as-wrap').style.display='none';
-  document.getElementById('s-qty').value='';
-  document.getElementById('s-discount').value='';
-  document.getElementById('s-stock-hint').textContent='';
-  document.getElementById('s-date').value=localDateStr();
-  document.getElementById('price-breakdown').style.display='none';
-  document.getElementById('disc-preview').style.display='none';
+function resetBill(){
+  ['b-name','b-phone','b-email','b-age','b-doctor'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('b-date').value=localDateStr();
+  document.getElementById('bill-items-area').innerHTML='';
+  billRowIds=[];
+  document.getElementById('total-display').textContent='Rs. 0.00';
+  document.getElementById('items-count').textContent='0 items';
+  document.getElementById('profit-preview').textContent='Profit: Rs. 0.00';
+  document.getElementById('profit-preview').className='profit-preview zero';
+  currentBillData=null;
+  addBillRow();
 }
 
 /* ============================================================
-   PROFIT SUMMARY
+   PROFESSIONAL PRINT BILL
 ============================================================ */
-function renderProfitSummary(){
-  var today    = RP_SALES.getToday();
-  var allSales = RP_SALES.getAll();
+function buildPrintBill(bill){
+  var rowsHtml=bill.items.map(function(item,i){
+    var bg=i%2===0?'#f8fafc':'#fff';
+    return '<tr style="background:'+bg+'">'+
+      '<td style="padding:9px 14px;">'+
+        '<span style="font-weight:600;">'+esc(item.medName)+'</span>'+
+        (item.medBrand?'<br><span style="font-size:11px;color:#777;">'+esc(item.medBrand)+'</span>':'')+
+      '</td>'+
+      '<td style="padding:9px 14px;text-align:right;">'+item.qty+' '+esc(item.qtyType||'')+'</td>'+
+      '<td style="padding:9px 14px;text-align:right;">Rs. '+parseFloat(item.cost).toFixed(2)+'</td>'+
+      '<td style="padding:9px 14px;text-align:right;font-weight:700;">Rs. '+item.subtotal.toFixed(2)+'</td>'+
+    '</tr>';
+  }).join('');
 
-  var todayProfit   = RP_SALES.getProfit(today);
-  var overallProfit = RP_SALES.getProfit(allSales);
-  var todaySales    = today.length;
-  var totalSales    = allSales.length;
-  var todayRevenue  = today.reduce(function(s,x){return s+(x.totalSelling||0);},0);
-  var totalRevenue  = allSales.reduce(function(s,x){return s+(x.totalSelling||0);},0);
+  var html=
+  '<div class="bill-doc">'+
+    '<div class="bill-doc-hdr">'+
+      '<div class="bill-doc-hdr-row">'+
+        '<div>'+
+          '<div class="bill-doc-name">POOJA PHARMACY</div>'+
+          '<div class="bill-doc-sub">Authorised Pharmaceutical Retailer</div>'+
+          '<div class="bill-doc-sub" style="margin-top:3px;">Email: saivenkatachala@gmail.com</div>'+
+        '</div>'+
+        '<div style="text-align:right;">'+
+          '<div class="bill-doc-billno">'+esc(bill.billNo)+'</div>'+
+          '<div class="bill-doc-date">Date: '+RP.fmtDate(bill.date)+'</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
 
-  function profitColor(v){ return v>0?'var(--success)':v<0?'var(--danger)':'var(--muted)'; }
-  function profitSign(v){ return v>0?'+':''; }
+    '<div class="bill-doc-info">'+
+      '<div class="bill-doc-info-box">'+
+        '<div class="bill-doc-lbl">Billed To</div>'+
+        '<div class="bill-doc-val">'+esc(bill.patientName)+'</div>'+
+        '<div class="bill-doc-detail">'+
+          'Phone: '+esc(bill.patientPhone||'-')+'<br>'+
+          'Age: '+esc(String(bill.age))+' years'+
+          (bill.patientEmail?'<br>Email: '+esc(bill.patientEmail):'')+
+        '</div>'+
+      '</div>'+
+      '<div class="bill-doc-info-box">'+
+        '<div class="bill-doc-lbl">Pharmacy Details</div>'+
+        '<div class="bill-doc-val">Pooja Pharmacy</div>'+
+        '<div class="bill-doc-detail">'+
+          (bill.doctor?'Prescribed by: Dr. '+esc(bill.doctor)+'<br>':'')+
+          'Ref No: '+esc(bill.billNo)+'<br>'+
+          'Date: '+RP.fmtDate(bill.date)+
+        '</div>'+
+      '</div>'+
+    '</div>'+
 
-  document.getElementById('profit-summary').innerHTML=
-    card('Today\'s Profit','Rs. '+todayProfit.toFixed(2),
-      todaySales+' sale(s) | Revenue: Rs.'+todayRevenue.toFixed(2),
-      profitColor(todayProfit))+
-    card('Overall Profit','Rs. '+overallProfit.toFixed(2),
-      totalSales+' sale(s) | Total Revenue: Rs.'+totalRevenue.toFixed(2),
-      profitColor(overallProfit))+
-    card('Today\'s Sales',todaySales,'Transactions today','var(--accent)')+
-    card('Total Sales',totalSales,'All time transactions','var(--accent2)');
+    '<table class="bill-doc-tbl">'+
+      '<thead><tr>'+
+        '<th style="width:42%">Medicine</th>'+
+        '<th style="text-align:right">Quantity</th>'+
+        '<th style="text-align:right">Unit Price</th>'+
+        '<th style="text-align:right">Amount</th>'+
+      '</tr></thead>'+
+      '<tbody>'+rowsHtml+'</tbody>'+
+      '<tfoot><tr>'+
+        '<td colspan="3" style="text-align:right;letter-spacing:.05em;font-size:12px;">TOTAL AMOUNT</td>'+
+        '<td style="text-align:right;font-size:16px;">Rs. '+bill.total.toFixed(2)+'</td>'+
+      '</tr></tfoot>'+
+    '</table>'+
 
-  function card(label,val,sub,color){
-    return '<div class="profit-card">'+
-      '<div class="pc-label">'+label+'</div>'+
-      '<div class="pc-val" style="color:'+color+';">'+val+'</div>'+
-      '<div class="pc-sub">'+sub+'</div>'+
-    '</div>';
-  }
+    '<div class="bill-doc-footer">'+
+      '<div class="bill-doc-sig">'+
+        '<div class="bill-doc-sig-box">Patient Signature</div>'+
+        '<div class="bill-doc-sig-box">Pharmacist Signature</div>'+
+      '</div>'+
+      '<div class="bill-doc-note">Computer generated bill. Thank you for choosing Pooja Pharmacy.</div>'+
+    '</div>'+
+    '<div class="bill-doc-bottom">Pooja Pharmacy &nbsp;|&nbsp; saivenkatachala@gmail.com</div>'+
+  '</div>';
+
+  document.getElementById('print-bill').innerHTML=html;
 }
-renderProfitSummary();
 
-/* ============================================================
-   SALE HISTORY
-============================================================ */
-function renderHistory(){
-  // Re-ensure date field always shows today's local date
-  var sDateEl=document.getElementById('s-date');
-  if(sDateEl&&!sDateEl.value) sDateEl.value=localDateStr();
-  var filter=document.getElementById('hist-filter').value;
-  var now=new Date();
-  var sales;
-  if(filter==='today'){
-    sales=RP_SALES.getToday();
-  } else if(filter==='week'){
-    var wStart=new Date(now); wStart.setDate(now.getDate()-7);
-    sales=RP_SALES.getRange(localDateStr(wStart),localDateStr(now));
-  } else if(filter==='month'){
-    var mStart=new Date(now.getFullYear(),now.getMonth(),1);
-    sales=RP_SALES.getRange(localDateStr(mStart),localDateStr(now));
-  } else {
-    sales=RP_SALES.getAll();
-  }
-  sales=[].concat(sales).reverse();
+function printCurrentBill(){
+  if(!currentBillData) return;
+  window.print();
+}
 
-  document.getElementById('sale-count').textContent=sales.length+' records';
-
-  var container=document.getElementById('sale-history-list');
-  if(!sales.length){
-    container.innerHTML='<div class="empty-state"><div class="empty-icon" style="font-size:36px;">&#128200;</div><p>No sales for this period.</p></div>';
+/* ---- Recent bills list ---- */
+function renderRecentBills(){
+  var bills=[].concat(RP.getBills()).reverse().slice(0,10);
+  document.getElementById('bill-count').textContent=RP.getBills().length+' total';
+  var list=document.getElementById('recent-bills-list');
+  if(!bills.length){
+    list.innerHTML='<div class="empty-state"><div class="empty-icon" style="font-size:36px;">&#128203;</div><p>No bills yet.</p></div>';
     return;
   }
-
-  var totalProfit=RP_SALES.getProfit(sales);
-  var totalRevenue=sales.reduce(function(s,x){return s+(x.totalSelling||0);},0);
-
-  container.innerHTML=
-    '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;'+
-    'padding:10px 14px;margin-bottom:12px;font-size:.82rem;display:flex;gap:16px;flex-wrap:wrap;">'+
-    '<span>Revenue: <strong style="color:var(--accent2)">Rs.'+totalRevenue.toFixed(2)+'</strong></span>'+
-    '<span>Profit: <strong style="color:'+(totalProfit>=0?'var(--success)':'var(--danger)')+'">'+
-    (totalProfit>=0?'+':'')+'Rs.'+totalProfit.toFixed(2)+'</strong></span>'+
-    '</div>'+
-    sales.map(function(s){
-      var profitColor=s.profit>=0?'var(--success)':'var(--danger)';
-      return '<div class="sale-history-item">'+
-        '<div style="min-width:0;flex:1;">'+
-          '<div style="font-weight:600;font-size:.88rem;">'+s.medicineName+'</div>'+
-          '<div style="font-size:.75rem;color:var(--muted);margin-top:2px;">'+
-            s.qtySold+' '+s.qtyType+
-            ' | Sold @ Rs.'+parseFloat(s.sellingPricePerUnit).toFixed(2)+
-            ' | Disc: '+parseFloat(s.discountPct||0).toFixed(1)+'%'+
-            ' | '+RP.fmtDate(s.date)+
-          '</div>'+
+  list.innerHTML=bills.map(function(b){
+    var profit=parseFloat(b.totalProfit||0);
+    var profitColor=profit>0?'var(--success)':profit<0?'var(--danger)':'var(--muted)';
+    return '<div class="recent-bill-item">'+
+      '<div style="min-width:0;flex:1;">'+
+        '<div style="font-weight:600;font-size:.88rem;">'+esc(b.patientName)+'</div>'+
+        '<div style="color:var(--muted);font-size:.74rem;">'+
+          esc(b.billNo)+' &middot; '+RP.fmtDate(b.date)+
+          ' &middot; '+(b.patientPhone||'')+
         '</div>'+
-        '<div style="text-align:right;flex-shrink:0;">'+
-          '<div style="font-weight:700;color:var(--accent);font-size:.88rem;font-family:monospace;">'+
-            'Rs.'+parseFloat(s.totalSelling).toFixed(2)+
-          '</div>'+
-          '<div style="font-size:.75rem;font-weight:600;color:'+profitColor+';">'+
-            (s.profit>=0?'+':'')+'Rs.'+parseFloat(s.profit).toFixed(2)+' profit'+
-          '</div>'+
+        '<div style="font-size:.73rem;color:'+profitColor+';font-weight:600;">'+
+          'Profit: '+(profit>=0?'+':'')+'Rs.'+profit.toFixed(2)+
         '</div>'+
-      '</div>';
-    }).join('');
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">'+
+        '<span style="font-weight:700;color:var(--accent);font-size:.88rem;white-space:nowrap;">'+
+          'Rs.'+parseFloat(b.total).toFixed(2)+
+        '</span>'+
+        '<button class="btn btn-sm btn-secondary" title="Reprint" onclick="reprintBill(\''+b.id+'\')">Print</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
 }
-renderHistory();
 
-/* ============================================================
-   CSV DOWNLOAD
-============================================================ */
-function downloadSalesCSV(){
-  var filter=document.getElementById('hist-filter').value;
-  var now=new Date();
-  var sales;
-  if(filter==='today') sales=RP_SALES.getToday();
-  else if(filter==='week'){
-    var ws=new Date(now); ws.setDate(now.getDate()-7);
-    sales=RP_SALES.getRange(localDateStr(ws),localDateStr(now));
-  } else if(filter==='month'){
-    var ms=new Date(now.getFullYear(),now.getMonth(),1);
-    sales=RP_SALES.getRange(localDateStr(ms),localDateStr(now));
-  } else sales=RP_SALES.getAll();
-
-  if(!sales.length){ RP.toast('No data to download.','warn'); return; }
-
-  var headers=['Date','Medicine','Qty Sold','Unit','Cost/Unit','MRP/Unit',
-    'Discount%','Selling Price/Unit','Total Selling','Total Cost','Profit'];
-  var rows=sales.map(function(s){
-    return [
-      s.date||'',
-      '"'+s.medicineName+'"',
-      s.qtySold,
-      '"'+s.qtyType+'"',
-      parseFloat(s.costPricePerUnit||0).toFixed(2),
-      parseFloat(s.mrpPerUnit||0).toFixed(2),
-      parseFloat(s.discountPct||0).toFixed(1),
-      parseFloat(s.sellingPricePerUnit||0).toFixed(2),
-      parseFloat(s.totalSelling||0).toFixed(2),
-      parseFloat(s.totalCost||0).toFixed(2),
-      parseFloat(s.profit||0).toFixed(2)
-    ].join(',');
-  });
-
-  var csv='\uFEFF'+[headers.join(',')].concat(rows).join('\n');
-  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  var a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='pooja-sales-'+filter+'-'+localDateStr()+'.csv';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  RP.toast('Sales CSV downloaded.','success');
+function reprintBill(id){
+  var bill=RP.getBills().find(function(b){return b.id===id;});
+  if(!bill) return;
+  currentBillData=bill;
+  buildPrintBill(bill);
+  setTimeout(function(){ window.print(); },150);
 }
+
+function esc(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Init
+addBillRow();
+renderRecentBills();
 </script>
 </body>
 </html>

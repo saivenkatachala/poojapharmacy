@@ -15,7 +15,7 @@
 const RP = {
 
   // ---- IMPORTANT: Replace with your deployed Apps Script URL ----
-      SHEET_URL: 'https://script.google.com/macros/s/AKfycbxeCGgyP5Gsfp4fAXylf-SbA3nBHiqD9s-QbpQOxYi1n1gG8TCQaHR47EPUlXXReKQJbw/exec',
+      SHEET_URL: 'https://script.google.com/macros/s/AKfycbyeSNM4vZQWeU5F-23Sa6g5U3aJWYFruPeO5_kafc-m2J2zg1ZeRHi1VnKrnAySTkSLeg/exec',
 
   OWNER_EMAIL: 'saivenkatachala@gmail.com',
 

@@ -109,6 +109,20 @@
   </div>
 </div>
 
+<!-- DUPLICATE STOCK POPUP -->
+<div class="popup-overlay" id="dup-popup">
+  <div class="popup-box">
+    <div class="popup-icon">&#128260;</div>
+    <div class="popup-title">Medicine Already in Stock</div>
+    <div class="popup-msg" id="dup-popup-msg"></div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px;">
+      <button class="btn btn-secondary" onclick="closeDupPopup()">Cancel</button>
+      <button class="btn btn-primary" onclick="goUpdateExisting()">Update in View Stock</button>
+      <button class="btn btn-warn" onclick="forceSaveAsNewBatch()">Add as New Batch Anyway</button>
+    </div>
+  </div>
+</div>
+
 <div class="page">
 <div class="container">
   <div class="page-header">
@@ -363,6 +377,10 @@ function updateBadge(){
 }
 updateBadge();
 
+function esc(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // Sync banner
 window._rpOnSyncComplete=function(){ buildRecentTable(); };
 RP.showSyncBanner('add-sync-banner');
@@ -500,6 +518,19 @@ function onCostPerTabletChange(){
   recalcPricing();
 }
 
+/* ---- Duplicate check: same Name + Brand (case/whitespace-insensitive) already in stock ---- */
+function findDuplicateStock(name, brand){
+  var nameNorm=(name||'').trim().toLowerCase();
+  var brandNorm=(brand||'').trim().toLowerCase();
+  if(!nameNorm) return null;
+  return RP.getStock().find(function(s){
+    return (s.name||'').trim().toLowerCase()===nameNorm &&
+           (s.brand||'').trim().toLowerCase()===brandNorm;
+  })||null;
+}
+
+var pendingDuplicateItem=null; // holds the item waiting on the "Add as New Batch Anyway" decision
+
 function saveDetailed(){
   var medType  = document.getElementById('d-medType').value;
   var name     = document.getElementById('d-medName').value.trim();
@@ -559,6 +590,44 @@ function saveDetailed(){
     addedOn: localDateStr()
   };
 
+  // ---- Duplicate check — same Name + Brand already in stock? ----
+  var existing=findDuplicateStock(name, brand);
+  if(existing){
+    pendingDuplicateItem=item;
+    var existingDesc=existing.quantity+' '+existing.qtyType+
+      (existing.expiry?' | Exp: '+RP.fmtDate(existing.expiry):'')+
+      (existing.mrp>0?' | MRP: Rs.'+parseFloat(existing.mrp).toFixed(2):'');
+    document.getElementById('dup-popup-msg').innerHTML=
+      '<strong>'+esc(name)+(brand?' ('+esc(brand)+')':'')+'</strong> is already in your stock:<br>'+
+      '<span style="color:var(--muted);font-size:.85rem;">'+existingDesc+'</span><br><br>'+
+      'To avoid duplicate entries, update the existing stock instead — or add this as a separate new batch if it genuinely has a different expiry/price.';
+    document.getElementById('dup-popup').classList.add('open');
+    return;
+  }
+
+  saveItem(item);
+  resetDetailed();
+}
+
+/* ---- Duplicate popup actions ---- */
+function closeDupPopup(){
+  document.getElementById('dup-popup').classList.remove('open');
+  pendingDuplicateItem=null;
+}
+function goUpdateExisting(){
+  if(!pendingDuplicateItem){ closeDupPopup(); return; }
+  var name=pendingDuplicateItem.name, brand=pendingDuplicateItem.brand;
+  var existing=findDuplicateStock(name, brand);
+  document.getElementById('dup-popup').classList.remove('open');
+  pendingDuplicateItem=null;
+  if(existing) window.location.href='view-stock.html?edit='+encodeURIComponent(existing.id);
+  else window.location.href='view-stock.html?q='+encodeURIComponent(name);
+}
+function forceSaveAsNewBatch(){
+  if(!pendingDuplicateItem) return;
+  var item=pendingDuplicateItem;
+  pendingDuplicateItem=null;
+  document.getElementById('dup-popup').classList.remove('open');
   saveItem(item);
   resetDetailed();
 }
