@@ -3,183 +3,92 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Dashboard — Pooja Pharmacy</title>
+<title>Stock Sale — Pooja Pharmacy</title>
 <link rel="icon" href="pp.png">
 <link rel="stylesheet" href="rp-styles.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
-  /* ============================================================
-     INTRO SCENE — real WebGL 3D scroll story (Three.js)
-     Beat 1: medicines fly from a supply truck into rack slots
-     Beat 2: a slot flashes red — low stock alert fires
-     Beat 3: a refill arrives — admin "stock received" alert fires, slot resolves
-     ============================================================ */
-  .intro-scene{
-    position:relative;height:380vh;background:var(--bg);
-  }
-  .intro-stage{
-    position:sticky;top:0;left:0;width:100%;height:100vh;
-    overflow:hidden;
-  }
-  #intro-canvas{
-    position:absolute;inset:0;width:100%;height:100%;display:block;
-  }
-  .intro-vignette{
-    position:absolute;inset:0;pointer-events:none;z-index:5;
-    background:radial-gradient(ellipse 90% 70% at 50% 50%, transparent 50%, var(--bg) 100%);
-  }
-  .intro-copy{
-    position:absolute;top:7%;left:0;right:0;text-align:center;z-index:30;
-    pointer-events:none;
-  }
-  .intro-copy .eyebrow{
-    font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;
-    color:var(--accent);font-weight:600;margin-bottom:8px;
-    text-shadow:0 2px 12px var(--bg);
-  }
-  .intro-copy h2{
-    font-family:'Playfair Display',serif;font-size:clamp(1.4rem,3.4vw,2.4rem);
-    font-weight:700;color:var(--text);max-width:680px;margin:0 auto;line-height:1.25;
-    text-shadow:0 2px 20px var(--bg),0 2px 4px var(--bg);
-  }
-  .intro-copy h2 .hl{color:var(--accent);}
-  .intro-copy h2 .hl-danger{color:var(--danger);}
-  .intro-copy h2 .hl-success{color:var(--success);}
+  .sale-layout{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;}
+  @media(max-width:960px){.sale-layout{grid-template-columns:1fr;}}
 
-  .scene-toast{
-    position:absolute;left:50%;bottom:9%;transform:translate(-50%,12px);
-    display:flex;align-items:center;gap:10px;
-    background:var(--surface);border:1px solid var(--border2);border-radius:14px;
-    padding:12px 18px;box-shadow:0 16px 40px rgba(0,0,0,.5);
-    opacity:0;z-index:40;max-width:90vw;transition:opacity .35s,transform .35s;
+  .med-search-input{
+    width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);font-family:'DM Sans',sans-serif;padding:10px 12px;font-size:.9rem;
   }
-  .scene-toast.show{opacity:1;transform:translate(-50%,0);}
-  .scene-toast .st-icon{font-size:22px;flex-shrink:0;}
-  .scene-toast .st-title{font-weight:700;font-size:.88rem;}
-  .scene-toast .st-sub{font-size:.76rem;color:var(--muted);}
-  .scene-toast.danger{border-left:4px solid var(--danger);}
-  .scene-toast.success{border-left:4px solid var(--success);}
+  .med-search-results{
+    display:none;position:absolute;top:100%;left:0;right:0;z-index:60;
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    max-height:300px;overflow-y:auto;margin-top:4px;
+    box-shadow:0 10px 28px rgba(0,0,0,.28);
+  }
+  .med-search-results.open{display:block;}
+  .med-result-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);}
+  .med-result-item:last-child{border-bottom:none;}
+  .med-result-item:hover{background:var(--surface2);}
+  .med-result-name{font-size:.88rem;font-weight:600;color:var(--text);}
+  .med-result-brand{font-weight:400;color:var(--muted);}
+  .med-result-meta{font-size:.75rem;color:var(--muted);margin-top:2px;}
+  .med-result-empty{padding:14px;color:var(--muted);font-size:.85rem;text-align:center;}
 
-  .scroll-cue{
-    position:absolute;bottom:5%;left:50%;transform:translateX(-50%);
-    display:flex;flex-direction:column;align-items:center;gap:6px;
-    color:var(--muted);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;
-    z-index:30;opacity:1;transition:opacity .3s;
+  .price-breakdown{
+    background:var(--surface2);border:1px solid var(--border);
+    border-radius:12px;padding:16px 20px;margin-top:14px;
   }
-  .scroll-cue .chev{font-size:18px;animation:bob 1.6s ease-in-out infinite;}
-  @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(6px);}}
+  .pb-row{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:6px 0;border-bottom:1px solid var(--border);font-size:.88rem;
+  }
+  .pb-row:last-child{border-bottom:none;padding-top:10px;margin-top:2px;}
+  .pb-row .label{color:var(--muted);}
+  .pb-row .value{font-weight:600;font-family:'JetBrains Mono',monospace;}
+  .pb-row.profit-row .value{color:var(--success);font-size:1.1rem;}
+  .pb-row.profit-row.loss .value{color:var(--danger);}
+  .pb-row.total-row{font-weight:700;font-size:.95rem;}
+  .pb-row.total-row .label{color:var(--text);}
 
-  .intro-loading{
-    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    z-index:50;color:var(--muted);font-size:.85rem;background:var(--bg);
-    transition:opacity .4s;
+  .profit-badge{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:4px 12px;border-radius:20px;font-size:.8rem;font-weight:700;
   }
+  .profit-badge.pos{background:rgba(34,197,94,.12);color:var(--success);}
+  .profit-badge.neg{background:rgba(255,77,109,.12);color:var(--danger);}
+  .profit-badge.zero{background:var(--surface2);color:var(--muted);}
 
-  @media(max-width:700px){
-    .intro-scene{height:340vh;}
+  .sale-history-item{
+    border-bottom:1px solid var(--border);padding:11px 0;
+    display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;
   }
-  @media(prefers-reduced-motion:reduce){
-    .intro-scene{height:auto;min-height:60vh;}
-    .intro-stage{position:relative;height:60vh;}
-  }
+  .sale-history-item:last-child{border-bottom:none;}
 
+  .profit-summary-grid{
+    display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;
+  }
+  .profit-card{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:18px 20px;
+    display:flex;flex-direction:column;gap:6px;
+  }
+  .profit-card .pc-label{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+  .profit-card .pc-val{font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:700;}
+  .profit-card .pc-sub{font-size:.78rem;color:var(--muted);}
 
-  /* ============================================================
-     PROFESSIONAL DASHBOARD BODY
-     ============================================================ */
-  .dash-hero{
-    display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
-    flex-wrap:wrap;margin-bottom:24px;
-  }
-  .dash-hero h1{font-family:'Playfair Display',serif;font-size:1.9rem;font-weight:700;}
-  .dash-hero p{color:var(--muted);margin-top:4px;font-size:.92rem;}
-  .dash-date-chip{
-    background:var(--surface2);border:1px solid var(--border);border-radius:12px;
-    padding:8px 16px;font-size:.8rem;color:var(--text2);display:flex;align-items:center;gap:8px;
-  }
-
-  .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:22px;}
-  .kpi-card{
-    position:relative;background:var(--surface);border:1px solid var(--border);
-    border-radius:16px;padding:18px 18px 16px;box-shadow:var(--card-shadow);
-    display:flex;flex-direction:column;gap:10px;transition:.2s;overflow:hidden;
-  }
-  .kpi-card:hover{transform:translateY(-2px);border-color:var(--accent);}
-  .kpi-top{display:flex;align-items:center;justify-content:space-between;}
-  .kpi-icon{
-    width:38px;height:38px;border-radius:10px;display:flex;align-items:center;
-    justify-content:center;font-size:18px;flex-shrink:0;
-  }
-  .kpi-icon.c-accent{background:rgba(0,212,170,.12);color:var(--accent);}
-  .kpi-icon.c-danger{background:rgba(255,77,109,.12);color:var(--danger);}
-  .kpi-icon.c-warn{background:rgba(255,183,3,.12);color:var(--warn);}
-  .kpi-icon.c-info{background:rgba(56,189,248,.12);color:var(--info);}
-  .kpi-icon.c-muted{background:var(--surface2);color:var(--muted);}
-  .kpi-trend{font-size:.72rem;font-weight:600;padding:3px 8px;border-radius:8px;}
-  .kpi-trend.up{background:rgba(34,197,94,.12);color:var(--success);}
-  .kpi-trend.down{background:rgba(255,77,109,.12);color:var(--danger);}
-  .kpi-trend.flat{background:var(--surface2);color:var(--muted);}
-  .kpi-val{font-family:'Playfair Display',serif;font-size:1.9rem;font-weight:700;line-height:1;}
-  .kpi-lbl{font-size:.8rem;color:var(--muted);}
-
-  .dash-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;margin-bottom:20px;align-items:start;}
-
-  .quick-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px;}
-  .qa-btn{
-    display:flex;flex-direction:column;align-items:center;gap:8px;
-    background:var(--surface);border:1px solid var(--border);border-radius:14px;
-    padding:16px 10px;text-decoration:none;color:var(--text);transition:.2s;
-    box-shadow:var(--card-shadow);
-  }
-  .qa-btn:hover{border-color:var(--accent);transform:translateY(-2px);}
-  .qa-icon{
-    width:42px;height:42px;border-radius:12px;background:var(--grad);
-    display:flex;align-items:center;justify-content:center;font-size:19px;color:#fff;
-  }
-  .qa-label{font-size:.78rem;font-weight:600;text-align:center;}
-
-  .revenue-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
-  .rev-card{
-    background:var(--surface);border:1px solid var(--border);border-radius:14px;
-    padding:16px 18px;box-shadow:var(--card-shadow);
-  }
-  .rev-card .rev-lbl{font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
-  .rev-card .rev-val{font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:700;}
-  .rev-card .rev-sub{font-size:.76rem;color:var(--muted);margin-top:4px;}
-
-  @media(max-width:1100px){
-    .kpi-grid{grid-template-columns:repeat(3,1fr);}
-    .dash-grid{grid-template-columns:1fr;}
-    .quick-actions{grid-template-columns:repeat(4,1fr);}
-    .revenue-strip{grid-template-columns:repeat(2,1fr);}
-  }
-  @media(max-width:700px){
-    .kpi-grid{grid-template-columns:repeat(2,1fr);}
-    .quick-actions{grid-template-columns:repeat(2,1fr);}
-    .revenue-strip{grid-template-columns:repeat(2,1fr);}
-    .dash-hero{align-items:flex-start;}
-    .kpi-val{font-size:1.5rem;}
-  }
-  @media(max-width:420px){
-    .kpi-grid{grid-template-columns:1fr 1fr;}
-  }
+  .filter-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+  .disc-preview{font-size:.82rem;color:var(--success);margin-top:4px;display:none;}
 </style>
 </head>
 <body>
-<!-- NAVBAR -->
 <nav class="navbar">
   <a href="dashboard.html" class="navbar-brand">
-    <div class="brand-icon">&#128138;</div>
-    <span>Pooja Pharmacy</span>
+    <div class="brand-icon">&#128138;</div><span>Pooja Pharmacy</span>
   </a>
-    <div class="navbar-nav">
-    <a href="dashboard.html" class="nav-link active">&#127968; <span class="nav-text">Home</span></a>
+  <div class="navbar-nav">
+    <a href="dashboard.html" class="nav-link">&#127968; <span class="nav-text">Home</span></a>
     <a href="add-stock.html" class="nav-link">&#10133; <span class="nav-text">Add Stock</span></a>
+    <a href="stock-sale.html" class="nav-link active">&#128200; <span class="nav-text">Stock Sale</span></a>
     <a href="view-stock.html" class="nav-link">&#128230; <span class="nav-text">View Stock</span></a>
     <a href="billing.html" class="nav-link">&#128451; <span class="nav-text">Bill Generation</span></a>
-    <a href="stock-sale.html" class="nav-link">&#128200; <span class="nav-text">Stock Sale</span></a>
     <a href="scan-stock.html" class="nav-link">&#128247; <span class="nav-text">Scan Stock</span></a>
-    <a href="alerts.html" class="nav-link">&#128276; <span class="nav-text">Alerts</span><span class="badge" id="alert-badge" style="display:none">0</span></a>
+    <a href="alerts.html" class="nav-link">&#128276; <span class="nav-text">Alerts</span>
+      <span class="badge" id="alert-badge" style="display:none">0</span></a>
   </div>
   <div class="navbar-right">
     <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">&#127769;</button>
@@ -187,100 +96,170 @@
   </div>
 </nav>
 
-<!-- AUTO POPUP container -->
-<div class="popup-overlay" id="popup-overlay">
+<!-- SUCCESS POPUP -->
+<div class="popup-overlay" id="sale-success-popup">
   <div class="popup-box">
-    <div class="popup-icon" id="popup-icon"></div>
-    <div class="popup-title" id="popup-title"></div>
-    <div class="popup-msg" id="popup-msg"></div>
-    <button class="btn btn-primary" onclick="closePopup()">Got it</button>
+    <div class="popup-icon">&#10003;</div>
+    <div class="popup-title">Sale Recorded!</div>
+    <div class="popup-msg" id="sale-success-msg"></div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="closeSaleSuccess()">OK</button>
+    </div>
   </div>
 </div>
-
-<!-- ============================================================
-     INTRO SCENE — Three.js WebGL 3D rack story, scroll-driven
-     ============================================================ -->
-<section class="intro-scene" id="intro-scene">
-  <div class="intro-stage" id="intro-stage">
-    <div class="intro-loading" id="intro-loading">Loading 3D scene…</div>
-    <canvas id="intro-canvas"></canvas>
-    <div class="intro-vignette"></div>
-
-    <div class="intro-copy">
-      <div class="eyebrow">Pooja Pharmacy · Live Stock Flow</div>
-      <h2 id="intro-headline">Every strip finds its <span class="hl">shelf</span> — automatically.</h2>
-    </div>
-
-    <div class="scene-toast danger" id="toast-low">
-      <span class="st-icon">⚠️</span>
-      <div>
-        <div class="st-title">Low stock — Insulin</div>
-        <div class="st-sub">Only 3 vials left · alert sent to admin</div>
-      </div>
-    </div>
-    <div class="scene-toast success" id="toast-ok">
-      <span class="st-icon">✅</span>
-      <div>
-        <div class="st-title">Stock received — Insulin</div>
-        <div class="st-sub">+50 vials added · shelf back to healthy</div>
-      </div>
-    </div>
-
-    <div class="scroll-cue" id="scroll-cue">
-      <span>Scroll</span><span class="chev">⌄</span>
-    </div>
-  </div>
-</section>
 
 <div class="page">
 <div class="container">
 
-  <!-- Header -->
-  <div class="dash-hero">
+  <div class="page-header">
+    <h1>Stock Sale</h1>
+    <p>Record stock sold from inventory. Profit is calculated from your cost price, not MRP.</p>
+  </div>
+
+  <div id="sale-sync-banner"></div>
+
+  <!-- Profit Summary Cards -->
+  <div class="profit-summary-grid" id="profit-summary">
+    <!-- built by JS -->
+  </div>
+
+  <div class="sale-layout">
+    <!-- LEFT: SALE FORM -->
     <div>
-      <h1 id="greeting-title">Dashboard</h1>
-      <p id="greeting"></p>
-    </div>
-    <div class="dash-date-chip">📅 <span id="today-date"></span></div>
-  </div>
-  <div id="dashboard-sync-banner"></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Record a Sale</span></div>
+        <div class="card-body">
 
-  <!-- Quick actions -->
-  <div class="quick-actions">
-    <a href="add-stock.html" class="qa-btn"><div class="qa-icon">➕</div><div class="qa-label">Add Stock</div></a>
-    <a href="billing.html" class="qa-btn"><div class="qa-icon">🧾</div><div class="qa-label">New Bill</div></a>
-    <a href="scan-stock.html" class="qa-btn"><div class="qa-icon">📷</div><div class="qa-label">Scan Stock</div></a>
-    <a href="alerts.html" class="qa-btn"><div class="qa-icon">🔔</div><div class="qa-label">View Alerts</div></a>
-  </div>
+          <div class="form-grid form-grid-2">
 
-  <!-- KPI Stats row -->
-  <div class="kpi-grid" id="stat-grid"></div>
+            <!-- Medicine selector -->
+            <div class="field" style="grid-column:1/-1;position:relative;">
+              <label>Medicine *</label>
+              <input type="text" id="s-medicine-search" class="med-search-input" placeholder="Search medicine by name or brand..."
+                autocomplete="off" oninput="onMedSearchInputSale(this)" onfocus="onMedSearchFocusSale(this)"
+                onblur="onMedSearchBlurSale(this)"/>
+              <input type="hidden" id="s-medicine" value=""/>
+              <div class="med-search-results" id="s-medicine-results"></div>
+              <p class="hint" id="s-stock-hint"></p>
+            </div>
 
-  <!-- Revenue / Profit strip -->
-  <div class="revenue-strip" id="profit-grid"></div>
+            <!-- Quantity Type (read from stock) -->
+            <div class="field">
+              <label>Quantity Type</label>
+              <input type="text" id="s-qtyType" readonly
+                style="background:var(--surface2);opacity:.7;cursor:not-allowed;"/>
+            </div>
 
-  <div class="dash-grid">
-    <!-- Recent stock -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">📦 Recent Stock Entries</span>
-        <a href="view-stock.html" class="btn btn-sm btn-secondary">View All →</a>
-      </div>
-      <div class="card-body">
-        <div class="table-wrap" id="recent-table-wrap">
-          <div class="empty-state"><div class="empty-icon">📭</div><p>No stock entries yet.</p></div>
+            <!-- Sell As: whole unit or individual unit (only shown when medicine has units-per-pack configured) -->
+            <div class="field" id="sell-as-wrap" style="display:none;">
+              <label>Sell As</label>
+              <select id="s-sellAs" onchange="onSellAsChange()">
+                <option value="strip">Strip</option>
+                <option value="tablet">Tablet</option>
+              </select>
+            </div>
+
+            <!-- Quantity sold -->
+            <div class="field">
+              <label>Quantity Sold *</label>
+              <input type="number" id="s-qty" min="1" placeholder="0"
+                oninput="recalcSale()"/>
+            </div>
+
+            <!-- Discount % -->
+            <div class="field">
+              <label>Discount % on MRP</label>
+              <input type="number" id="s-discount" min="0" max="100" step="0.1"
+                placeholder="0" oninput="recalcSale()"/>
+              <p class="hint disc-preview" id="disc-preview"></p>
+            </div>
+
+            <!-- Date -->
+            <div class="field">
+              <label>Sale Date</label>
+              <input type="date" id="s-date" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:9px 12px;font-family:'DM Sans',sans-serif;font-size:.9rem;"/>
+            </div>
+
+          </div>
+
+          <!-- Price breakdown -->
+          <div class="price-breakdown" id="price-breakdown" style="display:none;">
+            <p style="font-size:.78rem;font-weight:700;color:var(--muted);
+              text-transform:uppercase;letter-spacing:.09em;margin-bottom:10px;">
+              Price Breakdown
+            </p>
+
+            <div class="pb-row">
+              <span class="label">Cost Price / Unit</span>
+              <span class="value" id="pb-cost-unit" style="color:var(--warn);">Rs. 0.00</span>
+            </div>
+            <div class="pb-row">
+              <span class="label">MRP / Unit</span>
+              <span class="value" id="pb-mrp-unit" style="color:var(--accent2);">Rs. 0.00</span>
+            </div>
+            <div class="pb-row">
+              <span class="label">Discount on MRP</span>
+              <span class="value" id="pb-discount">0 %</span>
+            </div>
+            <div class="pb-row">
+              <span class="label">Selling Price / Unit (after discount)</span>
+              <span class="value" id="pb-sell-unit">Rs. 0.00</span>
+            </div>
+            <div class="pb-row">
+              <span class="label">Quantity</span>
+              <span class="value" id="pb-qty">0</span>
+            </div>
+            <div class="pb-row total-row">
+              <span class="label">Total Selling Price</span>
+              <span class="value" id="pb-total-sell">Rs. 0.00</span>
+            </div>
+            <div class="pb-row total-row">
+              <span class="label">Total Cost Price</span>
+              <span class="value" style="color:var(--warn);" id="pb-total-cost">Rs. 0.00</span>
+            </div>
+            <div class="pb-row profit-row" id="pb-profit-row">
+              <span class="label">Profit on this Sale</span>
+              <span class="value" id="pb-profit">Rs. 0.00</span>
+            </div>
+          </div>
+
+          <div class="flex-end" style="margin-top:18px;">
+            <button class="btn btn-secondary" onclick="resetSaleForm()">Reset</button>
+            <button class="btn btn-primary" onclick="submitSale()">Record Sale</button>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Alerts Section -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">⚠️ Active Alerts</span>
-        <button class="btn btn-sm btn-secondary" onclick="refreshAlerts()">Refresh</button>
-      </div>
-      <div class="card-body" id="alert-list">
-        <div class="empty-state"><div class="empty-icon">✅</div><p>All clear — no alerts right now!</p></div>
+    <!-- RIGHT: SALE HISTORY -->
+    <div>
+      <div class="card" style="position:sticky;top:84px;">
+        <div class="card-header">
+          <span class="card-title">Sale History</span>
+          <span id="sale-count" style="color:var(--muted);font-size:.8rem;"></span>
+        </div>
+        <div class="card-body">
+          <!-- Filter row -->
+          <div class="filter-row">
+            <select id="hist-filter" onchange="renderHistory()"
+              style="background:var(--surface2);border:1px solid var(--border);
+              border-radius:8px;color:var(--text);padding:7px 12px;font-family:'DM Sans',sans-serif;font-size:.83rem;">
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="all">All Time</option>
+            </select>
+            <button class="btn btn-sm btn-secondary" onclick="downloadSalesCSV()">
+              Download CSV
+            </button>
+          </div>
+          <div id="sale-history-list" style="max-height:500px;overflow-y:auto;">
+            <div class="empty-state">
+              <div class="empty-icon" style="font-size:36px;">&#128200;</div>
+              <p>No sales recorded yet.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -293,617 +272,512 @@
 RP.guard();
 RP.applyTheme();
 
+// ---- Local date helper (avoids UTC timezone shift) ----
+function localDateStr(d){
+  var dt=d?new Date(d):new Date();
+  var y=dt.getFullYear();
+  var m=String(dt.getMonth()+1).padStart(2,'0');
+  var day=String(dt.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+
+
 function logout(){ sessionStorage.removeItem('rp_auth'); window.location.href='index.html'; }
 function toggleTheme(){
-  const t=RP.getTheme()==='dark'?'light':'dark';
+  var t=RP.getTheme()==='dark'?'light':'dark';
   RP.setTheme(t);
   document.getElementById('theme-btn').innerHTML=t==='dark'?'&#127769;':'&#9728;';
 }
 document.getElementById('theme-btn').innerHTML=RP.getTheme()==='dark'?'&#127769;':'&#9728;';
 
-// Greeting
-const hr=new Date().getHours();
-document.getElementById('greeting').textContent=
-  (hr<12?'Good Morning ☀️':hr<17?'Good Afternoon 🌤️':'Good Evening 🌙')+
-  ', here\'s what\'s happening at the pharmacy today.';
-document.getElementById('today-date').textContent=new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
+function updateBadge(){
+  var a=RP.computeAlerts();
+  var b=document.getElementById('alert-badge');
+  b.style.display=a.length?'inline-block':'none';
+  b.textContent=a.length;
+}
+updateBadge();
 
-function buildStats(){
-  const stock=RP.getStock();
-  const bills=RP.getBills();
-  const alerts=RP.computeAlerts();
-  const low=stock.filter(s=>parseInt(s.quantity)<=RP.LOW_STOCK&&parseInt(s.quantity)>0).length;
-  const out=stock.filter(s=>parseInt(s.quantity)===0).length;
-  document.getElementById('stat-grid').innerHTML=`
-    <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-icon c-accent">📦</div><span class="kpi-trend flat">Live</span></div>
-      <div class="kpi-val">${stock.length}</div>
-      <div class="kpi-lbl">Total Products</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-icon c-danger">🔻</div>${low?'<span class="kpi-trend down">Watch</span>':'<span class="kpi-trend up">Good</span>'}</div>
-      <div class="kpi-val" style="color:var(--danger)">${low}</div>
-      <div class="kpi-lbl">Low Stock Items</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-icon c-muted">⛔</div>${out?'<span class="kpi-trend down">Action</span>':'<span class="kpi-trend up">Good</span>'}</div>
-      <div class="kpi-val" style="color:var(--muted)">${out}</div>
-      <div class="kpi-lbl">Out of Stock</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-icon c-info">🧾</div><span class="kpi-trend flat">Total</span></div>
-      <div class="kpi-val">${bills.length}</div>
-      <div class="kpi-lbl">Bills Generated</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-top"><div class="kpi-icon c-warn">🔔</div>${alerts.length?'<span class="kpi-trend down">Review</span>':'<span class="kpi-trend up">Clear</span>'}</div>
-      <div class="kpi-val" style="color:var(--warn)">${alerts.length}</div>
-      <div class="kpi-lbl">Active Alerts</div>
-    </div>
-  `;
+function esc(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function refreshAlerts(){
-  const alerts=RP.computeAlerts();
-  const badge=document.getElementById('alert-badge');
-  badge.style.display=alerts.length?'inline-block':'none';
-  badge.textContent=alerts.length;
+window._rpOnSyncComplete=function(){ renderProfitSummary(); renderHistory(); };
+RP.showSyncBanner('sale-sync-banner');
 
-  const list=document.getElementById('alert-list');
-  if(!alerts.length){
-    list.innerHTML=`<div class="empty-state"><div class="empty-icon">✅</div><p>All clear — no alerts right now!</p></div>`;
-    return;
-  }
-  list.innerHTML=alerts.map(a=>{
-    const cls=a.type==='expired'||a.type==='zero'?'danger':a.type==='expiry'?'warn':'warn';
-    const icon=a.type==='expired'?'💀':a.type==='zero'?'⛔':a.type==='expiry'?'⏰':'⚠️';
-    return `<div class="alert-card ${cls}" id="ac-${a.id}">
-      <span class="alert-icon">${icon}</span>
-      <span class="alert-msg">${a.msg}</span>
-      <span class="alert-dismiss" onclick="dismissAlert('${a.id}')">✕</span>
-    </div>`;
-  }).join('');
-  buildStats();
+// Set today's date
+document.getElementById('s-date').value=localDateStr();
+
+/* ============================================================
+   MEDICINE SEARCH
+============================================================ */
+function buildMedListSale(){
+  return RP.getStock()
+    .filter(function(s){ return parseFloat(s.quantity)>0; })
+    .map(function(s){
+      var mrp=parseFloat(s.mrp||s.mrpPerUnit||0);
+      var cost=parseFloat(s.costPrice||s.costPricePerUnit||0);
+      var tps=parseFloat(s.tabletsPerStrip||0);
+      return {
+        id:s.id, name:s.name||'', brand:s.brand||'', medType:s.medType||'',
+        qty:parseFloat(s.quantity)||0, qtyType:s.qtyType||'',
+        mrp:mrp, cost:cost, tps:tps,
+        mrpTablet:parseFloat(s.mrpPerTablet||(tps>0?mrp/tps:0)),
+        costTablet:parseFloat(s.costPerTablet||(tps>0?cost/tps:0))
+      };
+    });
 }
 
-function dismissAlert(id){
-  RP.dismissAlert(id);
-  document.getElementById('ac-'+id)?.remove();
-  refreshAlerts();
-}
-
-function buildRecentTable(){
-  const stock=[...RP.getStock()].reverse().slice(0,8);
-  if(!stock.length) return;
-  const wrap=document.getElementById('recent-table-wrap');
-  wrap.innerHTML=`<table>
-    <thead><tr>
-      <th>Medicine</th><th>Type</th><th>Brand</th>
-      <th>Quantity</th><th>Qty Type</th><th>Expiry</th><th>Status</th>
-    </tr></thead>
-    <tbody>
-      ${stock.map(s=>{
-        const qty=parseInt(s.quantity)||0;
-        let badge='<span class="badge badge-success">✓ OK</span>';
-        if(qty===0) badge='<span class="badge badge-muted">Out</span>';
-        else if(qty<=RP.LOW_STOCK) badge='<span class="badge badge-warn">⚠ Low</span>';
-        return `<tr>
-          <td><strong>${s.name}</strong></td>
-          <td><span class="badge badge-info">${s.medType}</span></td>
-          <td>${s.brand||'—'}</td>
-          <td class="mono">${qty}</td>
-          <td>${s.qtyType}</td>
-          <td>${RP.fmtDate(s.expiry)}</td>
-          <td>${badge}</td>
-        </tr>`;
-      }).join('')}
-    </tbody>
-  </table>`;
-}
-
-// Auto popup for critical alerts
-function showAutoPopups(){
-  const stock=RP.getStock();
-  const dismissed=RP.getDismissedAlerts();
-  const now=new Date();
-  const warnDate=new Date(); warnDate.setMonth(warnDate.getMonth()+RP.EXPIRY_WARN_MONTHS);
-  let critical=[];
-  stock.forEach(s=>{
-    const qty=parseInt(s.quantity)||0;
-    if(qty<=RP.LOW_STOCK&&qty>0&&!dismissed.includes('popup_low_'+s.id))
-      critical.push({type:'low',s});
-    if(s.expiry){
-      const exp=new Date(s.expiry);
-      if(exp<=warnDate&&exp>=now&&!dismissed.includes('popup_exp_'+s.id))
-        critical.push({type:'expiry',s,exp});
+function searchMedsSale(query){
+  var list=buildMedListSale();
+  if(!query) return list.slice(0,40);
+  var q=query.trim().toLowerCase();
+  if(!q) return list.slice(0,40);
+  var starts=[], contains=[];
+  list.forEach(function(m){
+    var nameL=m.name.toLowerCase(), brandL=m.brand.toLowerCase();
+    if(nameL.indexOf(q)===0||brandL.indexOf(q)===0){
+      starts.push(m);
+    } else if((nameL+' '+brandL+' '+m.medType.toLowerCase()).indexOf(q)>-1){
+      contains.push(m);
     }
   });
-  if(critical.length>0){
-    const c=critical[0];
-    if(c.type==='low'){
-      showPopup('⚠️','Low Stock Alert',
-        `<strong>${c.s.name}</strong> is running low!<br>Only <strong>${c.s.quantity} ${c.s.qtyType}</strong> remaining.<br>Please restock soon.`);
-      RP.dismissAlert('popup_low_'+c.s.id); // prevent re-show per session
-      sessionStorage.setItem('popup_low_'+c.s.id,'1');
-    } else {
-      const days=Math.ceil((c.exp-now)/(1000*60*60*24));
-      showPopup('⏰','Expiry Alert',
-        `<strong>${c.s.name}</strong> expires in <strong>${days} days</strong> (${c.s.expiry}).<br>Take action before it expires.`);
-      sessionStorage.setItem('popup_exp_'+c.s.id,'1');
-    }
+  return starts.concat(contains).slice(0,40);
+}
+
+function renderMedResultsSale(query){
+  var resultsEl=document.getElementById('s-medicine-results');
+  var matches=searchMedsSale(query);
+  if(!matches.length){
+    resultsEl.innerHTML='<div class="med-result-empty">No matching stock found.</div>';
+  } else {
+    resultsEl.innerHTML=matches.map(function(m){
+      var costTxt=m.cost>0?'Cost:Rs.'+m.cost.toFixed(2):'';
+      var subTxt=m.tps>0?(' | '+m.tps+'/'+m.qtyType.replace(/s$/,'')):'';
+      return '<div class="med-result-item" data-id="'+m.id+'" onmousedown="selectMedResultSale(this)">'+
+        '<div class="med-result-name">'+esc(m.name)+
+          (m.brand?' <span class="med-result-brand">('+esc(m.brand)+')</span>':'')+'</div>'+
+        '<div class="med-result-meta">'+m.qty+' '+esc(m.qtyType)+(costTxt?' | '+costTxt:'')+subTxt+'</div>'+
+      '</div>';
+    }).join('');
+  }
+  resultsEl.classList.add('open');
+  resultsEl.style.display='block';
+}
+
+function onMedSearchInputSale(input){
+  document.getElementById('s-medicine').value='';
+  renderMedResultsSale(input.value);
+  onMedicineSelect();
+}
+function onMedSearchFocusSale(input){
+  renderMedResultsSale(input.value);
+}
+function onMedSearchBlurSale(input){
+  setTimeout(function(){
+    var el=document.getElementById('s-medicine-results');
+    el.classList.remove('open'); el.style.display='none';
+  }, 150);
+}
+function selectMedResultSale(el){
+  var id=el.getAttribute('data-id');
+  var m=buildMedListSale().find(function(x){return x.id===id;});
+  if(!m) return;
+  document.getElementById('s-medicine-search').value=m.name+(m.brand?' ('+m.brand+')':'');
+  document.getElementById('s-medicine').value=m.id;
+  var el2=document.getElementById('s-medicine-results');
+  el2.classList.remove('open'); el2.style.display='none';
+  onMedicineSelect();
+}
+
+/* ============================================================
+   MEDICINE SELECTED
+============================================================ */
+function onMedicineSelect(){
+  var id=document.getElementById('s-medicine').value;
+  var sellAsWrap=document.getElementById('sell-as-wrap');
+  if(!id){
+    document.getElementById('s-qtyType').value='';
+    document.getElementById('s-stock-hint').textContent='';
+    document.getElementById('price-breakdown').style.display='none';
+    sellAsWrap.style.display='none';
+    return;
+  }
+  var m=buildMedListSale().find(function(x){return x.id===id;});
+  if(!m){
+    document.getElementById('s-qtyType').value='';
+    document.getElementById('s-stock-hint').textContent='';
+    document.getElementById('price-breakdown').style.display='none';
+    sellAsWrap.style.display='none';
+    return;
+  }
+  if(m.tps>0){
+    var sellAsSel=document.getElementById('s-sellAs');
+    sellAsSel.innerHTML=
+      '<option value="strip">Whole '+m.qtyType.replace(/s$/,'')+'</option>'+
+      '<option value="tablet">Individual Units</option>';
+    sellAsWrap.style.display='block';
+    sellAsSel.value='strip';
+  } else {
+    sellAsWrap.style.display='none';
+  }
+  updateQtyTypeDisplay();
+  document.getElementById('s-qty').value='';
+  recalcSale();
+}
+
+/* ---- When "Sell As" (whole unit / individual unit) changes ---- */
+function onSellAsChange(){
+  updateQtyTypeDisplay();
+  document.getElementById('s-qty').value='';
+  recalcSale();
+}
+
+/* ---- Update the read-only Quantity Type box + stock hint based on chosen sell unit ---- */
+function updateQtyTypeDisplay(){
+  var id=document.getElementById('s-medicine').value;
+  if(!id) return;
+  var m=buildMedListSale().find(function(x){return x.id===id;});
+  if(!m) return;
+  var sellAs=(m.tps>0)?document.getElementById('s-sellAs').value:'strip';
+
+  if(sellAs==='tablet'&&m.tps>0){
+    var availTablets=Math.floor(m.qty*m.tps);
+    document.getElementById('s-qtyType').value='Units';
+    document.getElementById('s-stock-hint').textContent=
+      'Available: '+availTablets+' units (from '+m.qty+' '+m.qtyType+')'+
+      (m.costTablet>0?' | Cost price: Rs.'+m.costTablet.toFixed(2)+' per unit':'');
+    document.getElementById('s-qty').max=availTablets;
+  } else {
+    document.getElementById('s-qtyType').value=m.qtyType;
+    document.getElementById('s-stock-hint').textContent=
+      'Available: '+m.qty+' '+m.qtyType+
+      (m.cost>0?' | Cost price: Rs.'+m.cost.toFixed(2)+' per '+m.qtyType.replace(/s$/,''):'');
+    document.getElementById('s-qty').max=m.qty;
   }
 }
 
-let popupQueue=[];
-function showPopup(icon,title,msg){
-  document.getElementById('popup-icon').textContent=icon;
-  document.getElementById('popup-title').textContent=title;
-  document.getElementById('popup-msg').innerHTML=msg;
-  document.getElementById('popup-overlay').classList.add('open');
+/* ============================================================
+   RECALCULATE on input change
+============================================================ */
+function recalcSale(){
+  var id=document.getElementById('s-medicine').value;
+  if(!id){
+    document.getElementById('price-breakdown').style.display='none';
+    return;
+  }
+  var m=buildMedListSale().find(function(x){return x.id===id;});
+  if(!m){
+    document.getElementById('price-breakdown').style.display='none';
+    return;
+  }
+
+  var sellAs   = (m.tps>0)?document.getElementById('s-sellAs').value:'strip';
+
+  var costPerUnit, mrpPerUnit, availQty;
+  if(sellAs==='tablet'&&m.tps>0){
+    costPerUnit = m.costTablet;
+    mrpPerUnit  = m.mrpTablet;
+    availQty    = Math.floor(m.qty*m.tps);
+  } else {
+    costPerUnit = m.cost;
+    mrpPerUnit  = m.mrp;
+    availQty    = m.qty;
+  }
+
+  var qty            = parseFloat(document.getElementById('s-qty').value)||0;
+  var discPct        = parseFloat(document.getElementById('s-discount').value)||0;
+
+  // Enforce max qty
+  if(qty>availQty){
+    document.getElementById('s-qty').value=availQty;
+    qty=availQty;
+    RP.toast('Max available stock is '+availQty,'warn');
+  }
+
+  // If MRP is 0, use cost price as MRP (fallback for items added without pricing)
+  var effectiveMrp = mrpPerUnit>0 ? mrpPerUnit : costPerUnit;
+
+  // Selling price = MRP - discount%
+  var discAmt        = effectiveMrp * (discPct/100);
+  var sellPerUnit    = effectiveMrp - discAmt;
+  var totalSell      = sellPerUnit * qty;
+  var totalCost      = costPerUnit * qty;
+  var profit         = totalSell - totalCost;
+
+  // Discount preview
+  var discPreview=document.getElementById('disc-preview');
+  if(discPct>0&&effectiveMrp>0){
+    discPreview.style.display='block';
+    discPreview.textContent='Discount: Rs.'+discAmt.toFixed(2)+
+      ' per unit → Selling at Rs.'+sellPerUnit.toFixed(2);
+  } else {
+    discPreview.style.display='none';
+  }
+
+  // Update breakdown
+  document.getElementById('price-breakdown').style.display='block';
+  document.getElementById('pb-cost-unit').textContent  = 'Rs. '+costPerUnit.toFixed(2);
+  document.getElementById('pb-mrp-unit').textContent   = 'Rs. '+effectiveMrp.toFixed(2);
+  document.getElementById('pb-discount').textContent   = discPct.toFixed(1)+' %';
+  document.getElementById('pb-sell-unit').textContent  = 'Rs. '+sellPerUnit.toFixed(2);
+  document.getElementById('pb-qty').textContent        = qty+' unit(s)';
+  document.getElementById('pb-total-sell').textContent = 'Rs. '+totalSell.toFixed(2);
+  document.getElementById('pb-total-cost').textContent = 'Rs. '+totalCost.toFixed(2);
+  document.getElementById('pb-profit').textContent     = (profit>=0?'+ ':'- ')+'Rs. '+Math.abs(profit).toFixed(2);
+
+  var profitRow=document.getElementById('pb-profit-row');
+  profitRow.classList.toggle('loss', profit<0);
 }
-function closePopup(){ document.getElementById('popup-overlay').classList.remove('open'); }
 
+/* ============================================================
+   SUBMIT SALE
+============================================================ */
+function submitSale(){
+  var id=document.getElementById('s-medicine').value;
+  if(!id){ RP.toast('Select a medicine.','error'); return; }
+  var m=buildMedListSale().find(function(x){return x.id===id;});
+  if(!m){ RP.toast('Select a medicine.','error'); return; }
 
-// Sync from Google Sheets on load — so all devices see same data
-window._rpOnSyncComplete = function(){ buildStats(); refreshAlerts(); buildRecentTable(); };
-RP.showSyncBanner('dashboard-sync-banner');
+  var qty=parseFloat(document.getElementById('s-qty').value)||0;
+  if(qty<=0){ RP.toast('Enter quantity sold.','error'); return; }
 
-function buildProfitGrid(){
-  if(typeof RP_SALES === 'undefined') return;
-  var today   = RP_SALES.getToday();
-  var allSales= RP_SALES.getAll();
-  var todayP  = RP_SALES.getProfit(today);
-  var overallP= RP_SALES.getProfit(allSales);
-  var todayRev= today.reduce(function(s,x){return s+(x.totalSelling||0);},0);
-  var totalRev= allSales.reduce(function(s,x){return s+(x.totalSelling||0);},0);
-  function pc(v){ return v>0?'var(--success)':v<0?'var(--danger)':'var(--muted)'; }
-  document.getElementById('profit-grid').innerHTML=
-    '<div class="rev-card">'+
-      '<div class="rev-lbl">Today Profit</div>'+
-      '<div class="rev-val" style="color:'+pc(todayP)+';">₹'+todayP.toFixed(2)+'</div>'+
-      '<div class="rev-sub">'+today.length+' sale(s) today</div>'+
-    '</div>'+
-    '<div class="rev-card">'+
-      '<div class="rev-lbl">Overall Profit</div>'+
-      '<div class="rev-val" style="color:'+pc(overallP)+';">₹'+overallP.toFixed(2)+'</div>'+
-      '<div class="rev-sub">'+allSales.length+' total sale(s)</div>'+
-    '</div>'+
-    '<div class="rev-card">'+
-      '<div class="rev-lbl">Today Revenue</div>'+
-      '<div class="rev-val accent">₹'+todayRev.toFixed(2)+'</div>'+
-      '<div class="rev-sub">From stock sales</div>'+
-    '</div>'+
-    '<div class="rev-card">'+
-      '<div class="rev-lbl">Total Revenue</div>'+
-      '<div class="rev-val accent">₹'+totalRev.toFixed(2)+'</div>'+
-      '<div class="rev-sub">All time</div>'+
+  var sellAs = (m.tps>0)?document.getElementById('s-sellAs').value:'strip';
+
+  var costPerUnit, mrpPerUnit, unitLabel, stockDeduct;
+  if(sellAs==='tablet'&&m.tps>0){
+    costPerUnit = m.costTablet;
+    mrpPerUnit  = m.mrpTablet;
+    unitLabel   = 'Units';
+    stockDeduct = qty/m.tps;               // fraction of a pack (strip/bottle/vial/box...)
+  } else {
+    costPerUnit = m.cost;
+    mrpPerUnit  = m.mrp;
+    unitLabel   = m.qtyType;
+    stockDeduct = qty;
+  }
+
+  var discPct       = parseFloat(document.getElementById('s-discount').value)||0;
+  var effectiveMrp  = mrpPerUnit>0?mrpPerUnit:costPerUnit;
+  var sellPerUnit   = effectiveMrp*(1-(discPct/100));
+  var totalSell     = sellPerUnit*qty;
+  var totalCost     = costPerUnit*qty;
+  var profit        = totalSell-totalCost;
+  var dateInput     = document.getElementById('s-date').value;
+  // Always use local date — never let it be empty or UTC-shifted
+  var date          = (dateInput && dateInput.length >= 10) ? dateInput.slice(0,10) : localDateStr();
+
+  var sale={
+    id:           RP.uid(),
+    stockId:      m.id,
+    medicineName: m.name,
+    qtyType:      unitLabel,
+    soldAs:       sellAs,
+    qtySold:      qty,
+    costPricePerUnit:   costPerUnit,
+    mrpPerUnit:         effectiveMrp,
+    discountPct:        discPct,
+    sellingPricePerUnit:sellPerUnit,
+    totalCost:          parseFloat(totalCost.toFixed(2)),
+    totalSelling:       parseFloat(totalSell.toFixed(2)),
+    profit:             parseFloat(profit.toFixed(2)),
+    date:         date,
+    createdOn:    new Date().toISOString()
+  };
+
+  // We deduct stock ourselves below (supports fractional strip deduction
+  // when sold as loose tablets), so tell RP_SALES.add to skip its own deduction.
+  RP_SALES.add(sale, true);
+
+  var stock=RP.getStock();
+  var sIdx=stock.findIndex(function(x){return x.id===sale.stockId;});
+  if(sIdx!==-1){
+    stock[sIdx].quantity=Math.max(0,parseFloat(((parseFloat(stock[sIdx].quantity)||0)-stockDeduct).toFixed(3)));
+    RP.saveStock(stock);
+    RP.postToSheet({action:'updateStock', data:stock[sIdx]});
+  }
+
+  document.getElementById('sale-success-msg').innerHTML=
+    '<strong>'+sale.medicineName+'</strong><br>'+
+    qty+' '+sale.qtyType+' sold at Rs.'+sellPerUnit.toFixed(2)+' each<br>'+
+    'Total: Rs.'+totalSell.toFixed(2)+'<br>'+
+    '<span style="color:'+(profit>=0?'var(--success)':'var(--danger)')+';">'+
+    'Profit: '+(profit>=0?'+':'')+'Rs.'+profit.toFixed(2)+'</span>';
+  document.getElementById('sale-success-popup').classList.add('open');
+
+  renderProfitSummary();
+  renderHistory();
+  updateBadge();
+}
+
+function closeSaleSuccess(){
+  document.getElementById('sale-success-popup').classList.remove('open');
+  resetSaleForm();
+}
+
+function resetSaleForm(){
+  document.getElementById('s-medicine').value='';
+  document.getElementById('s-medicine-search').value='';
+  document.getElementById('s-qtyType').value='';
+  document.getElementById('s-sellAs').value='strip';
+  document.getElementById('sell-as-wrap').style.display='none';
+  document.getElementById('s-qty').value='';
+  document.getElementById('s-discount').value='';
+  document.getElementById('s-stock-hint').textContent='';
+  document.getElementById('s-date').value=localDateStr();
+  document.getElementById('price-breakdown').style.display='none';
+  document.getElementById('disc-preview').style.display='none';
+}
+
+/* ============================================================
+   PROFIT SUMMARY
+============================================================ */
+function renderProfitSummary(){
+  var today    = RP_SALES.getToday();
+  var allSales = RP_SALES.getAll();
+
+  var todayProfit   = RP_SALES.getProfit(today);
+  var overallProfit = RP_SALES.getProfit(allSales);
+  var todaySales    = today.length;
+  var totalSales    = allSales.length;
+  var todayRevenue  = today.reduce(function(s,x){return s+(x.totalSelling||0);},0);
+  var totalRevenue  = allSales.reduce(function(s,x){return s+(x.totalSelling||0);},0);
+
+  function profitColor(v){ return v>0?'var(--success)':v<0?'var(--danger)':'var(--muted)'; }
+  function profitSign(v){ return v>0?'+':''; }
+
+  document.getElementById('profit-summary').innerHTML=
+    card('Today\'s Profit','Rs. '+todayProfit.toFixed(2),
+      todaySales+' sale(s) | Revenue: Rs.'+todayRevenue.toFixed(2),
+      profitColor(todayProfit))+
+    card('Overall Profit','Rs. '+overallProfit.toFixed(2),
+      totalSales+' sale(s) | Total Revenue: Rs.'+totalRevenue.toFixed(2),
+      profitColor(overallProfit))+
+    card('Today\'s Sales',todaySales,'Transactions today','var(--accent)')+
+    card('Total Sales',totalSales,'All time transactions','var(--accent2)');
+
+  function card(label,val,sub,color){
+    return '<div class="profit-card">'+
+      '<div class="pc-label">'+label+'</div>'+
+      '<div class="pc-val" style="color:'+color+';">'+val+'</div>'+
+      '<div class="pc-sub">'+sub+'</div>'+
     '</div>';
+  }
 }
+renderProfitSummary();
 
-buildStats();
-buildProfitGrid();
-refreshAlerts();
-buildRecentTable();
-setTimeout(showAutoPopups, 800);
-</script>
-
-<script>
-// ============================================================
-// INTRO SCENE — real WebGL 3D scene (Three.js), driven by scroll
-// Geometry: BoxGeometry racks, CylinderGeometry bottles,
-// BoxGeometry tablet strips with embossed blister bumps,
-// canvas-drawn label textures (generic, no real brand/photo).
-// ============================================================
-(function(){
-  var loadingEl = document.getElementById('intro-loading');
-
-  // Hard safety net: no matter what happens below (CDN blocked, slow network,
-  // an exception mid-setup), never leave the loading overlay stuck forever.
-  function dismissLoading(message){
-    if(!loadingEl) return;
-    if(message) loadingEl.textContent = message;
-    loadingEl.style.opacity = '0';
-    setTimeout(function(){ loadingEl.style.display='none'; }, 400);
+/* ============================================================
+   SALE HISTORY
+============================================================ */
+function renderHistory(){
+  // Re-ensure date field always shows today's local date
+  var sDateEl=document.getElementById('s-date');
+  if(sDateEl&&!sDateEl.value) sDateEl.value=localDateStr();
+  var filter=document.getElementById('hist-filter').value;
+  var now=new Date();
+  var sales;
+  if(filter==='today'){
+    sales=RP_SALES.getToday();
+  } else if(filter==='week'){
+    var wStart=new Date(now); wStart.setDate(now.getDate()-7);
+    sales=RP_SALES.getRange(localDateStr(wStart),localDateStr(now));
+  } else if(filter==='month'){
+    var mStart=new Date(now.getFullYear(),now.getMonth(),1);
+    sales=RP_SALES.getRange(localDateStr(mStart),localDateStr(now));
+  } else {
+    sales=RP_SALES.getAll();
   }
-  var safetyTimer = setTimeout(function(){
-    dismissLoading('3D preview unavailable — continue scrolling for the dashboard.');
-  }, 6000);
+  sales=[].concat(sales).reverse();
 
-  if(typeof THREE==='undefined'){
-    clearTimeout(safetyTimer);
-    dismissLoading('3D preview unavailable — continue scrolling for the dashboard.');
+  document.getElementById('sale-count').textContent=sales.length+' records';
+
+  var container=document.getElementById('sale-history-list');
+  if(!sales.length){
+    container.innerHTML='<div class="empty-state"><div class="empty-icon" style="font-size:36px;">&#128200;</div><p>No sales for this period.</p></div>';
     return;
   }
 
-  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var stageEl = document.getElementById('intro-stage');
-  var canvas  = document.getElementById('intro-canvas');
-  var headline  = document.getElementById('intro-headline');
-  var toastLow  = document.getElementById('toast-low');
-  var toastOk   = document.getElementById('toast-ok');
-  var cue       = document.getElementById('scroll-cue');
+  var totalProfit=RP_SALES.getProfit(sales);
+  var totalRevenue=sales.reduce(function(s,x){return s+(x.totalSelling||0);},0);
 
-  if(reduceMotion){
-    clearTimeout(safetyTimer);
-    dismissLoading();
-    return;
-  }
+  container.innerHTML=
+    '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;'+
+    'padding:10px 14px;margin-bottom:12px;font-size:.82rem;display:flex;gap:16px;flex-wrap:wrap;">'+
+    '<span>Revenue: <strong style="color:var(--accent2)">Rs.'+totalRevenue.toFixed(2)+'</strong></span>'+
+    '<span>Profit: <strong style="color:'+(totalProfit>=0?'var(--success)':'var(--danger)')+'">'+
+    (totalProfit>=0?'+':'')+'Rs.'+totalProfit.toFixed(2)+'</strong></span>'+
+    '</div>'+
+    sales.map(function(s){
+      var profitColor=s.profit>=0?'var(--success)':'var(--danger)';
+      return '<div class="sale-history-item">'+
+        '<div style="min-width:0;flex:1;">'+
+          '<div style="font-weight:600;font-size:.88rem;">'+s.medicineName+'</div>'+
+          '<div style="font-size:.75rem;color:var(--muted);margin-top:2px;">'+
+            s.qtySold+' '+s.qtyType+
+            ' | Sold @ Rs.'+parseFloat(s.sellingPricePerUnit).toFixed(2)+
+            ' | Disc: '+parseFloat(s.discountPct||0).toFixed(1)+'%'+
+            ' | '+RP.fmtDate(s.date)+
+          '</div>'+
+        '</div>'+
+        '<div style="text-align:right;flex-shrink:0;">'+
+          '<div style="font-weight:700;color:var(--accent);font-size:.88rem;font-family:monospace;">'+
+            'Rs.'+parseFloat(s.totalSelling).toFixed(2)+
+          '</div>'+
+          '<div style="font-size:.75rem;font-weight:600;color:'+profitColor+';">'+
+            (s.profit>=0?'+':'')+'Rs.'+parseFloat(s.profit).toFixed(2)+' profit'+
+          '</div>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+}
+renderHistory();
 
-  try{
+/* ============================================================
+   CSV DOWNLOAD
+============================================================ */
+function downloadSalesCSV(){
+  var filter=document.getElementById('hist-filter').value;
+  var now=new Date();
+  var sales;
+  if(filter==='today') sales=RP_SALES.getToday();
+  else if(filter==='week'){
+    var ws=new Date(now); ws.setDate(now.getDate()-7);
+    sales=RP_SALES.getRange(localDateStr(ws),localDateStr(now));
+  } else if(filter==='month'){
+    var ms=new Date(now.getFullYear(),now.getMonth(),1);
+    sales=RP_SALES.getRange(localDateStr(ms),localDateStr(now));
+  } else sales=RP_SALES.getAll();
 
-  // ---------- renderer / scene / camera ----------
-  var renderer = new THREE.WebGLRenderer({ canvas:canvas, antialias:true, alpha:true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  if(!sales.length){ RP.toast('No data to download.','warn'); return; }
 
-  var scene = new THREE.Scene();
-
-  var camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.set(0, -0.8, 8.5);
-  camera.lookAt(0, 0.2, 0);
-
-  // ---------- lighting ----------
-  var ambient = new THREE.AmbientLight(0xffffff, 0.55);
-  scene.add(ambient);
-
-  var keyLight = new THREE.DirectionalLight(0xffffff, 1.1);
-  keyLight.position.set(5, 8, 6);
-  keyLight.castShadow = true;
-  keyLight.shadow.mapSize.set(1024,1024);
-  keyLight.shadow.camera.near = 1;
-  keyLight.shadow.camera.far = 30;
-  keyLight.shadow.camera.left = -10;
-  keyLight.shadow.camera.right = 10;
-  keyLight.shadow.camera.top = 10;
-  keyLight.shadow.camera.bottom = -10;
-  scene.add(keyLight);
-
-  var fillLight = new THREE.DirectionalLight(0x6fb8ff, 0.35);
-  fillLight.position.set(-6, 3, -4);
-  scene.add(fillLight);
-
-  var rimLight = new THREE.PointLight(0x00d4aa, 0.6, 20);
-  rimLight.position.set(0, 2, 4);
-  scene.add(rimLight);
-
-  // ---------- ground (shadow catcher) ----------
-  var groundMat = new THREE.ShadowMaterial({ opacity: 0.28 });
-  var ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40), groundMat);
-  ground.rotation.x = -Math.PI/2;
-  ground.position.y = -2.85;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // ---------- rack frame group ----------
-  var rackGroup = new THREE.Group();
-  scene.add(rackGroup);
-
-  var frameMat = new THREE.MeshStandardMaterial({ color:0x2a3a52, roughness:0.6, metalness:0.35 });
-  var shelfMat = new THREE.MeshStandardMaterial({ color:0x3a4d68, roughness:0.55, metalness:0.3 });
-
-  var SHELF_Y = [-1.5, 0, 1.5];
-  var SLOT_X  = [-3, -1, 1, 3];
-  var RACK_DEPTH = 1.1;
-  var RACK_WIDTH = 8.4;
-
-  // verticals
-  [-4.1, 4.1].forEach(function(x){
-    var post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 4.2, 0.14), frameMat);
-    post.position.set(x, 0, -RACK_DEPTH/2);
-    post.castShadow = true;
-    rackGroup.add(post);
-    var postBack = post.clone();
-    postBack.position.z = RACK_DEPTH/2;
-    rackGroup.add(postBack);
+  var headers=['Date','Medicine','Qty Sold','Unit','Cost/Unit','MRP/Unit',
+    'Discount%','Selling Price/Unit','Total Selling','Total Cost','Profit'];
+  var rows=sales.map(function(s){
+    return [
+      s.date||'',
+      '"'+s.medicineName+'"',
+      s.qtySold,
+      '"'+s.qtyType+'"',
+      parseFloat(s.costPricePerUnit||0).toFixed(2),
+      parseFloat(s.mrpPerUnit||0).toFixed(2),
+      parseFloat(s.discountPct||0).toFixed(1),
+      parseFloat(s.sellingPricePerUnit||0).toFixed(2),
+      parseFloat(s.totalSelling||0).toFixed(2),
+      parseFloat(s.totalCost||0).toFixed(2),
+      parseFloat(s.profit||0).toFixed(2)
+    ].join(',');
   });
 
-  // shelves
-  SHELF_Y.forEach(function(y){
-    var shelf = new THREE.Mesh(new THREE.BoxGeometry(RACK_WIDTH, 0.08, RACK_DEPTH), shelfMat);
-    shelf.position.set(0, y - 0.45, 0);
-    shelf.castShadow = true;
-    shelf.receiveShadow = true;
-    rackGroup.add(shelf);
-  });
-  // base shelf (bottom)
-  var baseShelf = new THREE.Mesh(new THREE.BoxGeometry(RACK_WIDTH, 0.08, RACK_DEPTH), shelfMat);
-  baseShelf.position.set(0, -2.4, 0);
-  baseShelf.receiveShadow = true;
-  rackGroup.add(baseShelf);
-
-  // back panel, subtle
-  var backPanel = new THREE.Mesh(
-    new THREE.PlaneGeometry(RACK_WIDTH, 4.6),
-    new THREE.MeshStandardMaterial({ color:0x1a2438, roughness:0.9, metalness:0.1, side:THREE.DoubleSide })
-  );
-  backPanel.position.set(0, -0.2, -RACK_DEPTH/2 - 0.02);
-  backPanel.receiveShadow = true;
-  rackGroup.add(backPanel);
-
-  // ---------- canvas label texture helper ----------
-  // Generic, hand-drawn labels — no real brand/photo, just clean pharma-style iconography.
-  function makeLabelTexture(opts){
-    var w=256,h=160;
-    var c=document.createElement('canvas'); c.width=w; c.height=h;
-    var ctx=c.getContext('2d');
-    ctx.fillStyle = opts.bg; ctx.fillRect(0,0,w,h);
-    // accent stripe
-    ctx.fillStyle = opts.accent;
-    ctx.fillRect(0,0,w,28);
-    // cross icon
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(w/2-3, 6, 6, 16);
-    ctx.fillRect(w/2-8, 11, 16, 6);
-    // name text
-    ctx.fillStyle = opts.text || '#1a2438';
-    ctx.font = '600 22px Arial, sans-serif';
-    ctx.textAlign='center';
-    ctx.fillText(opts.name, w/2, h/2+6);
-    // subtitle
-    ctx.font='400 13px Arial, sans-serif';
-    ctx.fillStyle = opts.sub || '#5a7599';
-    ctx.fillText(opts.kind, w/2, h/2+30);
-    // thin border
-    ctx.strokeStyle='rgba(0,0,0,0.15)'; ctx.lineWidth=2;
-    ctx.strokeRect(1,1,w-2,h-2);
-    var tex = new THREE.CanvasTexture(c);
-    tex.needsUpdate = true;
-    return tex;
-  }
-
-  var PALETTE = [
-    { bg:'#ffffff', accent:'#0099ff', text:'#0a2540' },
-    { bg:'#ffffff', accent:'#00d4aa', text:'#0a2540' },
-    { bg:'#ffffff', accent:'#7c3aed', text:'#0a2540' },
-    { bg:'#fff8ec', accent:'#ffb703', text:'#3a2a08' }
-  ];
-
-  var PRODUCT_NAMES = [
-    'Paracetamol','Amoxicillin','Cetrizine','Ibuprofen',
-    'ORS Sachet','Vitamin C','Cough Syrup','Antacid',
-    'Bandage','Insulin','Saline Drip','Multivitamin'
-  ];
-
-  // ---------- product builders ----------
-  function buildTabletStrip(name, palette){
-    var g = new THREE.Group();
-    var bodyMat = new THREE.MeshStandardMaterial({
-      map: makeLabelTexture({ name:name, kind:'Tablets', bg:palette.bg, accent:palette.accent, text:palette.text }),
-      roughness:0.35, metalness:0.05
-    });
-    var sideMat = new THREE.MeshStandardMaterial({ color:0xd8d8d8, roughness:0.3, metalness:0.6 });
-    var body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.9, 0.06), [sideMat,sideMat,sideMat,sideMat,bodyMat,bodyMat]);
-    body.castShadow = true;
-    g.add(body);
-    // blister bumps
-    var bumpMat = new THREE.MeshStandardMaterial({ color:0xc8d8e8, roughness:0.15, metalness:0.1, transparent:true, opacity:0.85 });
-    for(var r=0;r<4;r++){
-      for(var col=0;col<2;col++){
-        var bump = new THREE.Mesh(new THREE.SphereGeometry(0.07,12,8,0,Math.PI*2,0,Math.PI/2), bumpMat);
-        bump.position.set((col-0.5)*0.28, 0.32 - r*0.22, 0.045);
-        bump.rotation.x = Math.PI;
-        g.add(bump);
-      }
-    }
-    return g;
-  }
-
-  function buildBottle(name, palette){
-    var g = new THREE.Group();
-    var bodyMat = new THREE.MeshStandardMaterial({ color:0xeef5fa, roughness:0.15, metalness:0.05, transparent:true, opacity:0.92 });
-    var body = new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.38,0.95,20), bodyMat);
-    body.castShadow = true;
-    g.add(body);
-    var capMat = new THREE.MeshStandardMaterial({ color:0x2a3a52, roughness:0.5, metalness:0.4 });
-    var cap = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.24,0.22,16), capMat);
-    cap.position.y = 0.58;
-    cap.castShadow = true;
-    g.add(cap);
-    var labelMat = new THREE.MeshStandardMaterial({
-      map: makeLabelTexture({ name:name, kind:'Syrup', bg:palette.bg, accent:palette.accent, text:palette.text }),
-      roughness:0.4
-    });
-    var label = new THREE.Mesh(new THREE.CylinderGeometry(0.385,0.385,0.5,20,1,true), labelMat);
-    label.position.y = -0.05;
-    g.add(label);
-    return g;
-  }
-
-  function buildBox(name, palette){
-    var g = new THREE.Group();
-    var sideMat = new THREE.MeshStandardMaterial({ color:palette.bg, roughness:0.6, metalness:0.05 });
-    var faceMat = new THREE.MeshStandardMaterial({
-      map: makeLabelTexture({ name:name, kind:'Capsules', bg:palette.bg, accent:palette.accent, text:palette.text }),
-      roughness:0.55
-    });
-    var box = new THREE.Mesh(new THREE.BoxGeometry(0.72,0.9,0.42), [sideMat,sideMat,sideMat,sideMat,faceMat,sideMat]);
-    box.castShadow = true;
-    g.add(box);
-    return g;
-  }
-
-  var BUILDERS = [buildTabletStrip, buildBottle, buildBox];
-
-  // ---------- slot positions ----------
-  function slotPosition(idx){
-    var shelfIdx = Math.floor(idx/4);
-    var col = idx % 4;
-    return new THREE.Vector3(SLOT_X[col], SHELF_Y[2-shelfIdx] - 0.05, 0.15);
-  }
-
-  var products = []; // { mesh, targetPos, startPos, flown:false }
-  var lowStockIdx = 9; // Insulin slot
-  var lowStockProduct = null;
-  var restockProduct  = null;
-
-  for(var i=0;i<12;i++){
-    var palette = PALETTE[i % PALETTE.length];
-    var builder = BUILDERS[i % BUILDERS.length];
-    var mesh = builder(PRODUCT_NAMES[i], palette);
-    var target = slotPosition(i);
-    var startPos = new THREE.Vector3((Math.random()-0.5)*2, 6.5, 9 + Math.random()*1.5);
-    mesh.position.copy(startPos);
-    mesh.rotation.set(Math.random()*2, Math.random()*2, Math.random()*2);
-    mesh.scale.setScalar(0.001);
-    scene.add(mesh);
-    var entry = { mesh:mesh, target:target, start:startPos, flown:false, idx:i };
-    products.push(entry);
-    if(i===lowStockIdx) lowStockProduct = entry;
-  }
-
-  // restock replacement product (flies in during beat 3)
-  (function(){
-    var palette = PALETTE[1];
-    var mesh = buildBottle('Insulin', palette);
-    var target = slotPosition(lowStockIdx);
-    var start = new THREE.Vector3(2.5, 6.5, 10.5);
-    mesh.position.copy(start);
-    mesh.scale.setScalar(0.001);
-    scene.add(mesh);
-    restockProduct = { mesh:mesh, target:target, start:start, flown:false };
-  })();
-
-  // ---------- sizing ----------
-  function resize(){
-    var w = stageEl.clientWidth, h = stageEl.clientHeight;
-    renderer.setSize(w,h,false);
-    camera.aspect = w/h;
-    camera.updateProjectionMatrix();
-  }
-  resize();
-  window.addEventListener('resize', resize);
-
-  // ---------- easing ----------
-  function clamp01(v){ return Math.max(0,Math.min(1,v)); }
-  function easeInOutCubic(t){ return t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
-  function lerpVec(a,b,t,out){
-    out.x = a.x + (b.x-a.x)*t;
-    out.y = a.y + (b.y-a.y)*t;
-    out.z = a.z + (b.z-a.z)*t;
-    return out;
-  }
-
-  // ---------- scroll progress ----------
-  var introSection = document.getElementById('intro-scene');
-  var progress = 0;
-
-  function computeProgress(){
-    var rect = introSection.getBoundingClientRect();
-    var total = rect.height - window.innerHeight;
-    if(total <= 0) return 1;
-    var scrolled = -rect.top;
-    return clamp01(scrolled/total);
-  }
-
-  var tmpVec = new THREE.Vector3();
-  var lowFlagged = false, lowResolved = false, restockFlown = false;
-
-  function applyBeats(p){
-    // Beat 0 (0 - 0.12): camera intro
-    var camT = easeInOutCubic(clamp01(p/0.12));
-    camera.position.y = -0.8 + camT*1.0;
-    camera.position.z = 8.5 - camT*1.0;
-    rackGroup.scale.setScalar(0.001 + 0.999*clamp01(p/0.08));
-
-    // Beat 1 (0.12 - 0.55): products fly in, staggered
-    var flyStart = 0.12, flyEnd = 0.58;
-    products.forEach(function(entry, i){
-      var stagger = i/products.length;
-      var local = clamp01((p - flyStart - stagger*(flyEnd-flyStart-0.18)) / 0.18);
-      var t = easeInOutCubic(local);
-      lerpVec(entry.start, entry.target, t, tmpVec);
-      entry.mesh.position.copy(tmpVec);
-      var scaleT = clamp01(local*1.4);
-      entry.mesh.scale.setScalar(0.001 + 0.999*scaleT);
-      entry.mesh.rotation.y = (1-t)*Math.PI*1.5;
-      entry.mesh.rotation.x *= (1-t);
-      entry.mesh.rotation.z *= (1-t);
-    });
-
-    // Beat 2 (0.6 - 0.74): low stock flag
-    var flagT = clamp01((p-0.60)/0.06);
-    if(flagT>0 && !lowFlagged){
-      lowFlagged = true;
-      headline.innerHTML = 'A slot runs low — <span class="hl hl-danger">instant alert</span> to the admin.';
-      toastLow.classList.add('show');
-    }
-    if(lowStockProduct){
-      var pulse = flagT>0 && flagT<1 ? (Math.sin(p*60)*0.5+0.5) : 0;
-      var mats = lowStockProduct.mesh.material;
-      // remove low-stock item from shelf (sold out) by scaling it down once flagged
-      var removeT = clamp01((p-0.62)/0.05);
-      lowStockProduct.mesh.scale.setScalar(Math.max(0.001, 0.999*(1-removeT)));
-    }
-
-    // Beat 3 (0.76 - 0.92): restock arrives, resolves
-    var restockStart=0.76, restockEnd=0.90;
-    var rT = easeInOutCubic(clamp01((p-restockStart)/(restockEnd-restockStart)));
-    if(restockProduct){
-      lerpVec(restockProduct.start, restockProduct.target, rT, tmpVec);
-      restockProduct.mesh.position.copy(tmpVec);
-      restockProduct.mesh.scale.setScalar(0.001 + 0.999*clamp01(rT*1.3));
-      restockProduct.mesh.rotation.y = (1-rT)*Math.PI*1.2;
-    }
-    if(rT>0.05 && !restockFlown){
-      restockFlown = true;
-      toastLow.classList.remove('show');
-      headline.innerHTML = 'Restocked — shelf is <span class="hl hl-success">healthy</span> again.';
-      toastOk.classList.add('show');
-    }
-    if(p>0.95 && !lowResolved){
-      lowResolved = true;
-      toastOk.classList.remove('show');
-    }
-
-    // final camera settle (0.9 - 1.0): wide establishing shot
-    var settleT = easeInOutCubic(clamp01((p-0.9)/0.1));
-    camera.position.x = settleT*1.2;
-    camera.position.y = 0.2 + settleT*1.4;
-    camera.position.z = 7.5 + settleT*3.5;
-    camera.lookAt(0, 0.1, 0);
-
-    cue.style.opacity = p>0.03 ? '0' : '1';
-  }
-
-  // ---------- render loop ----------
-  var rafId = null;
-  function tick(){
-    try{
-      progress = computeProgress();
-      applyBeats(progress);
-      rimLight.intensity = 0.5 + Math.sin(Date.now()*0.0015)*0.1;
-      renderer.render(scene, camera);
-      rafId = requestAnimationFrame(tick);
-    }catch(err){
-      if(rafId) cancelAnimationFrame(rafId);
-      dismissLoading('3D preview unavailable — continue scrolling for the dashboard.');
-      if(window.console && console.error) console.error('Intro scene render error:', err);
-    }
-  }
-
-  function start(){
-    clearTimeout(safetyTimer);
-    dismissLoading();
-    if(!rafId) tick();
-  }
-
-  // give the browser a tick to lay out the canvas before sizing/starting
-  requestAnimationFrame(function(){
-    resize();
-    start();
-  });
-
-  window.addEventListener('beforeunload', function(){
-    if(rafId) cancelAnimationFrame(rafId);
-  });
-
-  }catch(err){
-    clearTimeout(safetyTimer);
-    dismissLoading('3D preview unavailable — continue scrolling for the dashboard.');
-    if(window.console && console.error) console.error('Intro scene error:', err);
-  }
-})();
+  var csv='\uFEFF'+[headers.join(',')].concat(rows).join('\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='pooja-sales-'+filter+'-'+localDateStr()+'.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  RP.toast('Sales CSV downloaded.','success');
+}
 </script>
 </body>
 </html>

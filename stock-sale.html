@@ -10,6 +10,25 @@
   .sale-layout{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;}
   @media(max-width:960px){.sale-layout{grid-template-columns:1fr;}}
 
+  .med-search-input{
+    width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);font-family:'DM Sans',sans-serif;padding:10px 12px;font-size:.9rem;
+  }
+  .med-search-results{
+    display:none;position:absolute;top:100%;left:0;right:0;z-index:60;
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    max-height:300px;overflow-y:auto;margin-top:4px;
+    box-shadow:0 10px 28px rgba(0,0,0,.28);
+  }
+  .med-search-results.open{display:block;}
+  .med-result-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);}
+  .med-result-item:last-child{border-bottom:none;}
+  .med-result-item:hover{background:var(--surface2);}
+  .med-result-name{font-size:.88rem;font-weight:600;color:var(--text);}
+  .med-result-brand{font-weight:400;color:var(--muted);}
+  .med-result-meta{font-size:.75rem;color:var(--muted);margin-top:2px;}
+  .med-result-empty{padding:14px;color:var(--muted);font-size:.85rem;text-align:center;}
+
   .price-breakdown{
     background:var(--surface2);border:1px solid var(--border);
     border-radius:12px;padding:16px 20px;margin-top:14px;
@@ -114,11 +133,13 @@
           <div class="form-grid form-grid-2">
 
             <!-- Medicine selector -->
-            <div class="field" style="grid-column:1/-1;">
+            <div class="field" style="grid-column:1/-1;position:relative;">
               <label>Medicine *</label>
-              <select id="s-medicine" onchange="onMedicineSelect()" required>
-                <option value="">-- Select Medicine --</option>
-              </select>
+              <input type="text" id="s-medicine-search" class="med-search-input" placeholder="Search medicine by name or brand..."
+                autocomplete="off" oninput="onMedSearchInputSale(this)" onfocus="onMedSearchFocusSale(this)"
+                onblur="onMedSearchBlurSale(this)"/>
+              <input type="hidden" id="s-medicine" value=""/>
+              <div class="med-search-results" id="s-medicine-results"></div>
               <p class="hint" id="s-stock-hint"></p>
             </div>
 
@@ -129,7 +150,7 @@
                 style="background:var(--surface2);opacity:.7;cursor:not-allowed;"/>
             </div>
 
-            <!-- Sell As: Strip or Tablet (only shown when medicine has tablets/strip configured) -->
+            <!-- Sell As: whole unit or individual unit (only shown when medicine has units-per-pack configured) -->
             <div class="field" id="sell-as-wrap" style="display:none;">
               <label>Sell As</label>
               <select id="s-sellAs" onchange="onSellAsChange()">
@@ -277,63 +298,126 @@ function updateBadge(){
 }
 updateBadge();
 
-window._rpOnSyncComplete=function(){ populateMedicineDropdown(); renderProfitSummary(); renderHistory(); };
+function esc(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+window._rpOnSyncComplete=function(){ renderProfitSummary(); renderHistory(); };
 RP.showSyncBanner('sale-sync-banner');
 
 // Set today's date
 document.getElementById('s-date').value=localDateStr();
 
 /* ============================================================
-   MEDICINE DROPDOWN
+   MEDICINE SEARCH
 ============================================================ */
-function populateMedicineDropdown(){
-  var sel=document.getElementById('s-medicine');
-  var current=sel.value;
-  sel.innerHTML='<option value="">-- Select Medicine --</option>';
-  RP.getStock()
+function buildMedListSale(){
+  return RP.getStock()
     .filter(function(s){ return parseFloat(s.quantity)>0; })
-    .forEach(function(s){
-      var hasCost=s.costPrice>0;
+    .map(function(s){
+      var mrp=parseFloat(s.mrp||s.mrpPerUnit||0);
+      var cost=parseFloat(s.costPrice||s.costPricePerUnit||0);
       var tps=parseFloat(s.tabletsPerStrip||0);
-      var label=s.name+(s.brand?' ('+s.brand+')':'')+
-        ' — '+s.quantity+' '+s.qtyType+
-        (hasCost?' | Cost:Rs.'+parseFloat(s.costPrice).toFixed(2):'')+
-        (tps>0?' | '+tps+'/strip':'');
-      var opt=document.createElement('option');
-      opt.value=s.id;
-      opt.textContent=label;
-      opt.setAttribute('data-cost',s.costPrice||0);
-      opt.setAttribute('data-mrp',s.mrp||0);
-      opt.setAttribute('data-qtytype',s.qtyType||'');
-      opt.setAttribute('data-qty',s.quantity||0);
-      opt.setAttribute('data-name',s.name||'');
-      opt.setAttribute('data-tps',tps);
-      opt.setAttribute('data-cost-tablet',s.costPerTablet||(tps>0?(parseFloat(s.costPrice||0)/tps):0));
-      opt.setAttribute('data-mrp-tablet',s.mrpPerTablet||(tps>0?(parseFloat(s.mrp||0)/tps):0));
-      sel.appendChild(opt);
+      return {
+        id:s.id, name:s.name||'', brand:s.brand||'', medType:s.medType||'',
+        qty:parseFloat(s.quantity)||0, qtyType:s.qtyType||'',
+        mrp:mrp, cost:cost, tps:tps,
+        mrpTablet:parseFloat(s.mrpPerTablet||(tps>0?mrp/tps:0)),
+        costTablet:parseFloat(s.costPerTablet||(tps>0?cost/tps:0))
+      };
     });
-  if(current) sel.value=current;
 }
-populateMedicineDropdown();
+
+function searchMedsSale(query){
+  var list=buildMedListSale();
+  if(!query) return list.slice(0,40);
+  var q=query.trim().toLowerCase();
+  if(!q) return list.slice(0,40);
+  var starts=[], contains=[];
+  list.forEach(function(m){
+    var nameL=m.name.toLowerCase(), brandL=m.brand.toLowerCase();
+    if(nameL.indexOf(q)===0||brandL.indexOf(q)===0){
+      starts.push(m);
+    } else if((nameL+' '+brandL+' '+m.medType.toLowerCase()).indexOf(q)>-1){
+      contains.push(m);
+    }
+  });
+  return starts.concat(contains).slice(0,40);
+}
+
+function renderMedResultsSale(query){
+  var resultsEl=document.getElementById('s-medicine-results');
+  var matches=searchMedsSale(query);
+  if(!matches.length){
+    resultsEl.innerHTML='<div class="med-result-empty">No matching stock found.</div>';
+  } else {
+    resultsEl.innerHTML=matches.map(function(m){
+      var costTxt=m.cost>0?'Cost:Rs.'+m.cost.toFixed(2):'';
+      var subTxt=m.tps>0?(' | '+m.tps+'/'+m.qtyType.replace(/s$/,'')):'';
+      return '<div class="med-result-item" data-id="'+m.id+'" onmousedown="selectMedResultSale(this)">'+
+        '<div class="med-result-name">'+esc(m.name)+
+          (m.brand?' <span class="med-result-brand">('+esc(m.brand)+')</span>':'')+'</div>'+
+        '<div class="med-result-meta">'+m.qty+' '+esc(m.qtyType)+(costTxt?' | '+costTxt:'')+subTxt+'</div>'+
+      '</div>';
+    }).join('');
+  }
+  resultsEl.classList.add('open');
+  resultsEl.style.display='block';
+}
+
+function onMedSearchInputSale(input){
+  document.getElementById('s-medicine').value='';
+  renderMedResultsSale(input.value);
+  onMedicineSelect();
+}
+function onMedSearchFocusSale(input){
+  renderMedResultsSale(input.value);
+}
+function onMedSearchBlurSale(input){
+  setTimeout(function(){
+    var el=document.getElementById('s-medicine-results');
+    el.classList.remove('open'); el.style.display='none';
+  }, 150);
+}
+function selectMedResultSale(el){
+  var id=el.getAttribute('data-id');
+  var m=buildMedListSale().find(function(x){return x.id===id;});
+  if(!m) return;
+  document.getElementById('s-medicine-search').value=m.name+(m.brand?' ('+m.brand+')':'');
+  document.getElementById('s-medicine').value=m.id;
+  var el2=document.getElementById('s-medicine-results');
+  el2.classList.remove('open'); el2.style.display='none';
+  onMedicineSelect();
+}
 
 /* ============================================================
    MEDICINE SELECTED
 ============================================================ */
 function onMedicineSelect(){
-  var sel=document.getElementById('s-medicine');
-  var opt=sel.selectedOptions[0];
+  var id=document.getElementById('s-medicine').value;
   var sellAsWrap=document.getElementById('sell-as-wrap');
-  if(!opt||!opt.value){
+  if(!id){
     document.getElementById('s-qtyType').value='';
     document.getElementById('s-stock-hint').textContent='';
     document.getElementById('price-breakdown').style.display='none';
     sellAsWrap.style.display='none';
     return;
   }
-  var tps=parseFloat(opt.getAttribute('data-tps'))||0;
-  if(tps>0){
+  var m=buildMedListSale().find(function(x){return x.id===id;});
+  if(!m){
+    document.getElementById('s-qtyType').value='';
+    document.getElementById('s-stock-hint').textContent='';
+    document.getElementById('price-breakdown').style.display='none';
+    sellAsWrap.style.display='none';
+    return;
+  }
+  if(m.tps>0){
+    var sellAsSel=document.getElementById('s-sellAs');
+    sellAsSel.innerHTML=
+      '<option value="strip">Whole '+m.qtyType.replace(/s$/,'')+'</option>'+
+      '<option value="tablet">Individual Units</option>';
     sellAsWrap.style.display='block';
-    document.getElementById('s-sellAs').value='strip';
+    sellAsSel.value='strip';
   } else {
     sellAsWrap.style.display='none';
   }
@@ -342,7 +426,7 @@ function onMedicineSelect(){
   recalcSale();
 }
 
-/* ---- When "Sell As" (Strip/Tablet) changes ---- */
+/* ---- When "Sell As" (whole unit / individual unit) changes ---- */
 function onSellAsChange(){
   updateQtyTypeDisplay();
   document.getElementById('s-qty').value='';
@@ -351,29 +435,25 @@ function onSellAsChange(){
 
 /* ---- Update the read-only Quantity Type box + stock hint based on chosen sell unit ---- */
 function updateQtyTypeDisplay(){
-  var sel=document.getElementById('s-medicine');
-  var opt=sel.selectedOptions[0];
-  if(!opt||!opt.value) return;
-  var tps=parseFloat(opt.getAttribute('data-tps'))||0;
-  var sellAs=(tps>0)?document.getElementById('s-sellAs').value:'strip';
-  var availStrips=parseFloat(opt.getAttribute('data-qty'))||0;
-  var qtyTypeLabel=opt.getAttribute('data-qtytype')||'';
+  var id=document.getElementById('s-medicine').value;
+  if(!id) return;
+  var m=buildMedListSale().find(function(x){return x.id===id;});
+  if(!m) return;
+  var sellAs=(m.tps>0)?document.getElementById('s-sellAs').value:'strip';
 
-  if(sellAs==='tablet'&&tps>0){
-    var availTablets=Math.floor(availStrips*tps);
-    var costTablet=parseFloat(opt.getAttribute('data-cost-tablet'))||0;
-    document.getElementById('s-qtyType').value='Tablets';
+  if(sellAs==='tablet'&&m.tps>0){
+    var availTablets=Math.floor(m.qty*m.tps);
+    document.getElementById('s-qtyType').value='Units';
     document.getElementById('s-stock-hint').textContent=
-      'Available: '+availTablets+' tablets (from '+availStrips+' '+qtyTypeLabel+')'+
-      (costTablet>0?' | Cost price: Rs.'+costTablet.toFixed(2)+' per tablet':'');
+      'Available: '+availTablets+' units (from '+m.qty+' '+m.qtyType+')'+
+      (m.costTablet>0?' | Cost price: Rs.'+m.costTablet.toFixed(2)+' per unit':'');
     document.getElementById('s-qty').max=availTablets;
   } else {
-    var cost=parseFloat(opt.getAttribute('data-cost'))||0;
-    document.getElementById('s-qtyType').value=qtyTypeLabel;
+    document.getElementById('s-qtyType').value=m.qtyType;
     document.getElementById('s-stock-hint').textContent=
-      'Available: '+availStrips+' '+qtyTypeLabel+
-      (cost>0?' | Cost price: Rs.'+cost.toFixed(2)+' per '+qtyTypeLabel.replace(/s$/,''):'');
-    document.getElementById('s-qty').max=availStrips;
+      'Available: '+m.qty+' '+m.qtyType+
+      (m.cost>0?' | Cost price: Rs.'+m.cost.toFixed(2)+' per '+m.qtyType.replace(/s$/,''):'');
+    document.getElementById('s-qty').max=m.qty;
   }
 }
 
@@ -381,25 +461,28 @@ function updateQtyTypeDisplay(){
    RECALCULATE on input change
 ============================================================ */
 function recalcSale(){
-  var sel=document.getElementById('s-medicine');
-  var opt=sel.selectedOptions[0];
-  if(!opt||!opt.value){
+  var id=document.getElementById('s-medicine').value;
+  if(!id){
+    document.getElementById('price-breakdown').style.display='none';
+    return;
+  }
+  var m=buildMedListSale().find(function(x){return x.id===id;});
+  if(!m){
     document.getElementById('price-breakdown').style.display='none';
     return;
   }
 
-  var tps      = parseFloat(opt.getAttribute('data-tps'))||0;
-  var sellAs   = (tps>0)?document.getElementById('s-sellAs').value:'strip';
+  var sellAs   = (m.tps>0)?document.getElementById('s-sellAs').value:'strip';
 
   var costPerUnit, mrpPerUnit, availQty;
-  if(sellAs==='tablet'&&tps>0){
-    costPerUnit = parseFloat(opt.getAttribute('data-cost-tablet'))||0;
-    mrpPerUnit  = parseFloat(opt.getAttribute('data-mrp-tablet'))||0;
-    availQty    = Math.floor((parseFloat(opt.getAttribute('data-qty'))||0)*tps);
+  if(sellAs==='tablet'&&m.tps>0){
+    costPerUnit = m.costTablet;
+    mrpPerUnit  = m.mrpTablet;
+    availQty    = Math.floor(m.qty*m.tps);
   } else {
-    costPerUnit = parseFloat(opt.getAttribute('data-cost'))||0;
-    mrpPerUnit  = parseFloat(opt.getAttribute('data-mrp'))||0;
-    availQty    = parseFloat(opt.getAttribute('data-qty'))||0;
+    costPerUnit = m.cost;
+    mrpPerUnit  = m.mrp;
+    availQty    = m.qty;
   }
 
   var qty            = parseFloat(document.getElementById('s-qty').value)||0;
@@ -451,26 +534,26 @@ function recalcSale(){
    SUBMIT SALE
 ============================================================ */
 function submitSale(){
-  var sel=document.getElementById('s-medicine');
-  var opt=sel.selectedOptions[0];
-  if(!opt||!opt.value){ RP.toast('Select a medicine.','error'); return; }
+  var id=document.getElementById('s-medicine').value;
+  if(!id){ RP.toast('Select a medicine.','error'); return; }
+  var m=buildMedListSale().find(function(x){return x.id===id;});
+  if(!m){ RP.toast('Select a medicine.','error'); return; }
 
   var qty=parseFloat(document.getElementById('s-qty').value)||0;
   if(qty<=0){ RP.toast('Enter quantity sold.','error'); return; }
 
-  var tps    = parseFloat(opt.getAttribute('data-tps'))||0;
-  var sellAs = (tps>0)?document.getElementById('s-sellAs').value:'strip';
+  var sellAs = (m.tps>0)?document.getElementById('s-sellAs').value:'strip';
 
   var costPerUnit, mrpPerUnit, unitLabel, stockDeduct;
-  if(sellAs==='tablet'&&tps>0){
-    costPerUnit = parseFloat(opt.getAttribute('data-cost-tablet'))||0;
-    mrpPerUnit  = parseFloat(opt.getAttribute('data-mrp-tablet'))||0;
-    unitLabel   = 'Tablets';
-    stockDeduct = qty/tps;               // fraction of a strip
+  if(sellAs==='tablet'&&m.tps>0){
+    costPerUnit = m.costTablet;
+    mrpPerUnit  = m.mrpTablet;
+    unitLabel   = 'Units';
+    stockDeduct = qty/m.tps;               // fraction of a pack (strip/bottle/vial/box...)
   } else {
-    costPerUnit = parseFloat(opt.getAttribute('data-cost'))||0;
-    mrpPerUnit  = parseFloat(opt.getAttribute('data-mrp'))||0;
-    unitLabel   = opt.getAttribute('data-qtytype')||'';
+    costPerUnit = m.cost;
+    mrpPerUnit  = m.mrp;
+    unitLabel   = m.qtyType;
     stockDeduct = qty;
   }
 
@@ -486,8 +569,8 @@ function submitSale(){
 
   var sale={
     id:           RP.uid(),
-    stockId:      opt.value,
-    medicineName: opt.getAttribute('data-name')||'',
+    stockId:      m.id,
+    medicineName: m.name,
     qtyType:      unitLabel,
     soldAs:       sellAs,
     qtySold:      qty,
@@ -522,7 +605,6 @@ function submitSale(){
     'Profit: '+(profit>=0?'+':'')+'Rs.'+profit.toFixed(2)+'</span>';
   document.getElementById('sale-success-popup').classList.add('open');
 
-  populateMedicineDropdown();
   renderProfitSummary();
   renderHistory();
   updateBadge();
@@ -535,6 +617,7 @@ function closeSaleSuccess(){
 
 function resetSaleForm(){
   document.getElementById('s-medicine').value='';
+  document.getElementById('s-medicine-search').value='';
   document.getElementById('s-qtyType').value='';
   document.getElementById('s-sellAs').value='strip';
   document.getElementById('sell-as-wrap').style.display='none';

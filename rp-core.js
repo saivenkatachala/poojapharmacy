@@ -15,8 +15,8 @@
 const RP = {
 
   // ---- IMPORTANT: Replace with your deployed Apps Script URL ----
-      //SHEET_URL: 'https://script.google.com/macros/s/AKfycbyKCRKblnliejpWlluC3yHrk0p2ZcEbz1n2Ke9rugy_MIideYJADZLGOBA85Xsw3ghd/exec',
-      SHEET_URL:'https://script.google.com/macros/s/AKfycbytP4C7w9BjzbjmqzJ9f0zmuZcPrsW3CaNPoZDciqSkH7sNAFb3k2rwFnlBT7R_2fjPBQ/exec',
+      SHEET_URL: 'https://script.google.com/macros/s/AKfycbxeCGgyP5Gsfp4fAXylf-SbA3nBHiqD9s-QbpQOxYi1n1gG8TCQaHR47EPUlXXReKQJbw/exec',
+
   OWNER_EMAIL: 'saivenkatachala@gmail.com',
 
   MED_TYPES: [
