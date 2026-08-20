@@ -15,7 +15,7 @@
 const RP = {
 
   // ---- IMPORTANT: Replace with your deployed Apps Script URL ----
-      SHEET_URL: 'https://script.google.com/macros/s/AKfycbyeSNM4vZQWeU5F-23Sa6g5U3aJWYFruPeO5_kafc-m2J2zg1ZeRHi1VnKrnAySTkSLeg/exec',
+      SHEET_URL: 'https://script.google.com/macros/s/AKfycbwJCjyfMvhYedzKXE-AAXC89WcTk4wBbVPEL7wVYdxGer3irh2rpNuEDjX3tpQGE_WH0w/exec',
 
   OWNER_EMAIL: 'saivenkatachala@gmail.com',
 
@@ -401,10 +401,13 @@ const RP_SALES = {
 
   getAll(){ return this._get(); },
 
-  // skipStockDeduct=true when caller (billing.html) already deducted stock
+  // skipStockDeduct=true when caller (billing.html / stock-sale.html) already deducted stock
   add(sale, skipStockDeduct){
     sale.id        = sale.id || RP.uid();
     sale.createdOn = sale.createdOn || new Date().toISOString();
+    // Tell the backend too — otherwise its own fallback deduction runs a
+    // SECOND time on top of the frontend's manual deduction (double-deduct bug).
+    sale.skipStockDeduct = !!skipStockDeduct;
     // Always ensure .date is a clean YYYY-MM-DD local date string
     // If caller passed it from the date input, keep it — it's already correct
     // If missing, generate from local device time (not UTC)
@@ -416,7 +419,7 @@ const RP_SALES = {
     const sales = this._get();
     sales.push(sale);
     this._set(sales);
-    // Only deduct stock if caller hasn't already done it
+    // Only deduct stock locally if caller hasn't already done it
     if(!skipStockDeduct){
       const stock = RP.getStock();
       const idx = stock.findIndex(s => s.id === sale.stockId);
