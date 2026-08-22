@@ -79,6 +79,25 @@
   }
   .sale-item-row .remove-btn:hover{background:rgba(255,77,109,.1);}
 
+  .sale-extra-row{
+    display:grid;grid-template-columns:2fr 1fr 30px;
+    gap:8px;align-items:center;margin-bottom:10px;
+  }
+  @media(max-width:640px){
+    .sale-extra-row{grid-template-columns:1fr;}
+  }
+  .sale-extra-row input{
+    font-size:.83rem;padding:8px 9px;width:100%;
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);font-family:'DM Sans',sans-serif;
+  }
+  .sale-extra-row .remove-btn{
+    align-self:center;width:28px;height:28px;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface);color:var(--danger);cursor:pointer;font-size:.85rem;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .sale-extra-row .remove-btn:hover{background:rgba(255,77,109,.1);}
+
   .group-discount-box{
     background:rgba(13,148,136,.08);border:1px solid rgba(13,148,136,.25);
     border-radius:12px;padding:14px 16px;margin-top:16px;
@@ -268,6 +287,16 @@
             <p class="hint" style="margin-top:6px;">Each item also has its own optional Discount % field — both can be combined. With just one item, this discount simply applies to that item.</p>
           </div>
 
+          <!-- Extra Charges (optional) — e.g. doctor's fee, injection charge -->
+          <div class="group-discount-box" style="background:rgba(168,85,247,.07);border-color:rgba(168,85,247,.25);">
+            <p class="section-label">Extra Charges (optional)</p>
+            <div id="sale-extras-area"></div>
+            <div class="flex-end" style="margin-top:2px;">
+              <button class="btn btn-sm btn-secondary" onclick="addSaleExtraRow()">+ Add Extra Charge</button>
+            </div>
+            <p class="hint" style="margin-top:6px;">e.g. doctor's fee, injection charge, consultation fee. Added straight to the total and counted fully as profit — no cost or discount applies to these.</p>
+          </div>
+
           <!-- Date -->
           <div class="field" style="margin-top:16px;max-width:220px;">
             <label>Sale Date</label>
@@ -290,6 +319,10 @@
             <div class="pb-row">
               <span class="label">Overall Discount</span>
               <span class="value" id="pb-group-discount">Rs. 0.00</span>
+            </div>
+            <div class="pb-row" id="pb-extras-row" style="display:none;">
+              <span class="label">Extra Charges (added, no discount)</span>
+              <span class="value" id="pb-extras-total" style="color:#a855f7;">Rs. 0.00</span>
             </div>
             <div class="pb-row total-row">
               <span class="label">Grand Total (Selling)</span>
@@ -562,6 +595,44 @@ function checkMaxQtyRow(input){
   if(val>max){ input.value=max; RP.toast('Max available: '+max,'warn'); }
 }
 
+/* ============================================================
+   EXTRA CHARGES (optional) — e.g. doctor's fee, injection charge.
+   No cost basis, no discount applied — added straight to the total
+   and counted fully as profit.
+============================================================ */
+var saleExtraIds=[];
+
+function addSaleExtraRow(){
+  var id='se_'+RP.uid();
+  saleExtraIds.push(id);
+  var div=document.createElement('div');
+  div.className='sale-extra-row';
+  div.id=id;
+  div.innerHTML=
+    '<input type="text" class="extra-desc" placeholder="e.g. Injection Charge, Consultation Fee" oninput="recalcSale()"/>'+
+    '<input type="number" class="extra-amount" min="0" step="0.01" placeholder="Amount (Rs.)" oninput="recalcSale()"/>'+
+    '<button class="remove-btn" onclick="removeSaleExtraRow(\''+id+'\')" title="Remove">&#10005;</button>';
+  document.getElementById('sale-extras-area').appendChild(div);
+  recalcSale();
+}
+
+function removeSaleExtraRow(id){
+  saleExtraIds=saleExtraIds.filter(function(r){return r!==id;});
+  var el=document.getElementById(id);
+  if(el) el.remove();
+  recalcSale();
+}
+
+function getSaleExtras(){
+  var extras=[];
+  document.querySelectorAll('.sale-extra-row').forEach(function(row){
+    var desc=(row.querySelector('.extra-desc').value||'').trim();
+    var amount=parseFloat(row.querySelector('.extra-amount').value)||0;
+    if(amount>0) extras.push({ description: desc||'Extra Charge', amount: amount });
+  });
+  return extras;
+}
+
 /* ---- When a medicine is picked for a row — set up Sell As + auto-fill price ---- */
 function onMedSelectRow(row){
   var idInput=row.querySelector('.med-id-input');
@@ -668,9 +739,13 @@ function recalcSale(){
     });
   });
 
-  if(!lineItems.length){
+  // Extra charges — no cost, no discount, added straight on top
+  var extras=getSaleExtras();
+  var extrasTotal=extras.reduce(function(sum,e){ return sum+e.amount; },0);
+
+  if(!lineItems.length && !extras.length){
     document.getElementById('price-breakdown').style.display='none';
-    return { lineItems:[], grandGross:0, grandAfterItem:0, grpDiscountAmount:0, grandFinal:0, grandCost:0, grandProfit:0 };
+    return { lineItems:[], extras:[], grandGross:0, grandAfterItem:0, grpDiscountAmount:0, extrasTotal:0, grandFinal:0, grandCost:0, grandProfit:0 };
   }
 
   var grpType=document.getElementById('grp-disc-type').value;
@@ -688,20 +763,25 @@ function recalcSale(){
     grandFinal += li.finalAmount;
     grandCost  += li.cost;
   });
+
+  // Extras are added on top of the discounted medicine total — not discounted themselves.
+  // Since they have no cost, the full extras amount flows straight to profit
+  // (grandCost is untouched by extras, so grandFinal - grandCost already reflects that).
+  grandFinal += extrasTotal;
   var grandProfit = grandFinal - grandCost;
 
-  renderSaleBreakdown(lineItems, grandAfterItem, grpDiscountAmount, grandFinal, grandCost, grandProfit);
+  renderSaleBreakdown(lineItems, extras, grandAfterItem, grpDiscountAmount, extrasTotal, grandFinal, grandCost, grandProfit);
 
   return {
-    lineItems: lineItems, grandGross: grandGross, grandAfterItem: grandAfterItem,
-    grpDiscountAmount: grpDiscountAmount, grandFinal: grandFinal,
+    lineItems: lineItems, extras: extras, grandGross: grandGross, grandAfterItem: grandAfterItem,
+    grpDiscountAmount: grpDiscountAmount, extrasTotal: extrasTotal, grandFinal: grandFinal,
     grandCost: grandCost, grandProfit: grandProfit
   };
 }
 
-function renderSaleBreakdown(lineItems, grandAfterItem, grpDiscountAmount, grandFinal, grandCost, grandProfit){
+function renderSaleBreakdown(lineItems, extras, grandAfterItem, grpDiscountAmount, extrasTotal, grandFinal, grandCost, grandProfit){
   var pbItems=document.getElementById('pb-items');
-  pbItems.innerHTML=lineItems.map(function(li){
+  var itemsHtml=lineItems.map(function(li){
     return '<div class="pb-row">'+
       '<span class="label">'+esc(li.m.name)+' &times;'+li.qty+
         (li.discPct>0?' <span style="color:var(--muted);">(item -'+li.discPct.toFixed(1)+'%)</span>':'')+
@@ -709,8 +789,23 @@ function renderSaleBreakdown(lineItems, grandAfterItem, grpDiscountAmount, grand
       '<span class="value">Rs. '+li.finalAmount.toFixed(2)+'</span>'+
     '</div>';
   }).join('');
+  var extrasHtml=extras.map(function(e){
+    return '<div class="pb-row">'+
+      '<span class="label" style="color:#a855f7;">'+esc(e.description)+' <span style="color:var(--muted);">(extra)</span></span>'+
+      '<span class="value" style="color:#a855f7;">Rs. '+e.amount.toFixed(2)+'</span>'+
+    '</div>';
+  }).join('');
+  pbItems.innerHTML=itemsHtml+extrasHtml;
+
   document.getElementById('pb-subtotal').textContent='Rs. '+grandAfterItem.toFixed(2);
   document.getElementById('pb-group-discount').textContent='Rs. '+grpDiscountAmount.toFixed(2);
+  var extrasRow=document.getElementById('pb-extras-row');
+  if(extrasTotal>0){
+    extrasRow.style.display='flex';
+    document.getElementById('pb-extras-total').textContent='Rs. '+extrasTotal.toFixed(2);
+  } else {
+    extrasRow.style.display='none';
+  }
   document.getElementById('pb-total-sell').textContent='Rs. '+grandFinal.toFixed(2);
   document.getElementById('pb-total-cost').textContent='Rs. '+grandCost.toFixed(2);
   var profitEl=document.getElementById('pb-profit');
@@ -725,7 +820,9 @@ function renderSaleBreakdown(lineItems, grandAfterItem, grpDiscountAmount, grand
 ============================================================ */
 function submitSale(){
   var calc=recalcSale();
-  if(!calc.lineItems.length){ RP.toast('Add at least one medicine with a quantity and price.','error'); return; }
+  if(!calc.lineItems.length && !calc.extras.length){
+    RP.toast('Add at least one medicine or an extra charge.','error'); return;
+  }
 
   var dateInput=document.getElementById('s-date').value;
   var date=(dateInput && dateInput.length>=10)?dateInput.slice(0,10):localDateStr();
@@ -767,6 +864,33 @@ function submitSale(){
     RP_SALES.add(sale, true);
   });
 
+  // Extra charges — no stock, no cost, 100% profit. Recorded as their own
+  // sale rows (soldAs:'extra') sharing the same groupId so History groups
+  // them together with the medicines from this same sale.
+  calc.extras.forEach(function(ex){
+    var sale={
+      id: RP.uid(),
+      groupId: groupId,
+      stockId: '',
+      medicineName: ex.description,
+      qtyType: 'Extra',
+      soldAs: 'extra',
+      qtySold: 1,
+      costPricePerUnit: 0,
+      mrpPerUnit: ex.amount,
+      discountPct: 0,
+      itemDiscountPct: 0,
+      groupDiscountShare: 0,
+      sellingPricePerUnit: ex.amount,
+      totalCost: 0,
+      totalSelling: parseFloat(ex.amount.toFixed(2)),
+      profit: parseFloat(ex.amount.toFixed(2)),
+      date: date,
+      createdOn: new Date().toISOString()
+    };
+    RP_SALES.add(sale, true); // no stock to deduct — skip deduction entirely
+  });
+
   // Apply aggregated deductions once per medicine, then sync each changed item
   var stock=RP.getStock();
   Object.keys(deductions).forEach(function(stockId){
@@ -782,8 +906,12 @@ function submitSale(){
   });
 
   var itemCount=calc.lineItems.length;
+  var extraCount=calc.extras.length;
+  var summaryBits=[];
+  if(itemCount>0) summaryBits.push(itemCount+' item'+(itemCount!==1?'s':''));
+  if(extraCount>0) summaryBits.push(extraCount+' extra charge'+(extraCount!==1?'s':''));
   document.getElementById('sale-success-msg').innerHTML=
-    '<strong>'+itemCount+' item'+(itemCount!==1?'s':'')+' sold</strong><br>'+
+    '<strong>'+summaryBits.join(' + ')+' recorded</strong><br>'+
     'Total: Rs.'+calc.grandFinal.toFixed(2)+'<br>'+
     '<span style="color:'+(calc.grandProfit>=0?'var(--success)':'var(--danger)')+';">'+
     'Profit: '+(calc.grandProfit>=0?'+':'')+'Rs.'+calc.grandProfit.toFixed(2)+'</span>';
@@ -802,6 +930,8 @@ function closeSaleSuccess(){
 function resetSaleForm(){
   saleRowIds=[];
   document.getElementById('sale-items-area').innerHTML='';
+  saleExtraIds=[];
+  document.getElementById('sale-extras-area').innerHTML='';
   document.getElementById('grp-disc-type').value='percent';
   document.getElementById('grp-disc-value').value='';
   onGroupDiscountTypeChange();
@@ -813,14 +943,26 @@ function resetSaleForm(){
 /* ============================================================
    PROFIT SUMMARY
 ============================================================ */
+/* Counts distinct sale TRANSACTIONS rather than line items — a 5-item
+   batch sale (shared groupId) counts as 1, same as a single-item sale. */
+function countTransactions(sales){
+  var seen={};
+  var count=0;
+  sales.forEach(function(s){
+    var key=s.groupId||s.id;
+    if(!seen[key]){ seen[key]=true; count++; }
+  });
+  return count;
+}
+
 function renderProfitSummary(){
   var today    = RP_SALES.getToday();
   var allSales = RP_SALES.getAll();
 
   var todayProfit   = RP_SALES.getProfit(today);
   var overallProfit = RP_SALES.getProfit(allSales);
-  var todaySales    = today.length;
-  var totalSales    = allSales.length;
+  var todaySales    = countTransactions(today);
+  var totalSales    = countTransactions(allSales);
   var todayRevenue  = today.reduce(function(s,x){return s+(x.totalSelling||0);},0);
   var totalRevenue  = allSales.reduce(function(s,x){return s+(x.totalSelling||0);},0);
 
@@ -898,16 +1040,19 @@ function renderHistory(){
 
   function renderSaleLine(s, indent){
     var profitColor=s.profit>=0?'var(--success)':'var(--danger)';
+    var isExtra=s.soldAs==='extra';
+    var nameHtml=esc(s.medicineName)+(isExtra?' <span style="font-size:.68rem;font-weight:700;color:#a855f7;background:rgba(168,85,247,.12);padding:2px 7px;border-radius:10px;margin-left:4px;">EXTRA</span>':'');
+    var metaHtml=isExtra
+      ? 'Extra charge | '+RP.fmtDate(s.date)
+      : s.qtySold+' '+esc(s.qtyType)+
+        ' | Sold @ Rs.'+parseFloat(s.sellingPricePerUnit).toFixed(2)+
+        (s.itemDiscountPct?' | Item Disc: '+parseFloat(s.itemDiscountPct).toFixed(1)+'%':'')+
+        (s.groupDiscountShare?' | Group Disc: Rs.'+parseFloat(s.groupDiscountShare).toFixed(2):'')+
+        ' | '+RP.fmtDate(s.date);
     return '<div class="sale-history-item"'+(indent?' style="padding-left:14px;border-left:2px solid var(--border);margin-left:2px;"':'')+'>'+
       '<div style="min-width:0;flex:1;">'+
-        '<div style="font-weight:600;font-size:.85rem;">'+esc(s.medicineName)+'</div>'+
-        '<div style="font-size:.72rem;color:var(--muted);margin-top:2px;">'+
-          s.qtySold+' '+esc(s.qtyType)+
-          ' | Sold @ Rs.'+parseFloat(s.sellingPricePerUnit).toFixed(2)+
-          (s.itemDiscountPct?' | Item Disc: '+parseFloat(s.itemDiscountPct).toFixed(1)+'%':'')+
-          (s.groupDiscountShare?' | Group Disc: Rs.'+parseFloat(s.groupDiscountShare).toFixed(2):'')+
-          ' | '+RP.fmtDate(s.date)+
-        '</div>'+
+        '<div style="font-weight:600;font-size:.85rem;">'+nameHtml+'</div>'+
+        '<div style="font-size:.72rem;color:var(--muted);margin-top:2px;">'+metaHtml+'</div>'+
       '</div>'+
       '<div style="text-align:right;flex-shrink:0;">'+
         '<div style="font-weight:700;color:var(--accent);font-size:.85rem;font-family:monospace;">'+
@@ -995,6 +1140,10 @@ function renderSalesTable(){
     '<tbody>'+sales.map(function(s){
       var profitColor=s.profit>=0?'var(--success)':'var(--danger)';
       var discTxt=(parseFloat(s.discountPct)||0).toFixed(1)+'%';
+      var isExtra=s.soldAs==='extra';
+      var badges=[];
+      if(isExtra) badges.push('<span class="badge" style="font-size:.68rem;background:rgba(168,85,247,.12);color:#a855f7;">Extra</span>');
+      if(s.groupId) badges.push('<span class="badge badge-info" style="font-size:.68rem;">Batch</span>');
       return '<tr>'+
         '<td>'+RP.fmtDate(s.date)+'</td>'+
         '<td><strong>'+esc(s.medicineName)+'</strong></td>'+
@@ -1004,7 +1153,7 @@ function renderSalesTable(){
         '<td class="mono">'+discTxt+'</td>'+
         '<td class="mono">Rs.'+parseFloat(s.totalSelling).toFixed(2)+'</td>'+
         '<td class="mono" style="color:'+profitColor+';font-weight:600;">'+(s.profit>=0?'+':'')+'Rs.'+parseFloat(s.profit).toFixed(2)+'</td>'+
-        '<td>'+(s.groupId?'<span class="badge badge-info" style="font-size:.68rem;">Batch</span>':'—')+'</td>'+
+        '<td>'+(badges.length?badges.join(' '):'—')+'</td>'+
         '<td style="white-space:nowrap;">'+
           '<button class="btn btn-sm btn-secondary" onclick="openSaleEdit(\''+s.id+'\')">Edit</button> '+
           '<button class="btn btn-sm btn-danger" onclick="openSaleDelModal(\''+s.id+'\')">Del</button>'+
@@ -1020,18 +1169,26 @@ var saleEditId=null;
 function openSaleEdit(id){
   var s=RP_SALES.getById(id);
   if(!s) return;
+  var isExtra=s.soldAs==='extra';
   saleEditId=id;
-  document.getElementById('se-med-name').textContent=s.medicineName;
-  document.getElementById('se-med-meta').textContent=
-    s.qtyType+' | Sold as: '+(s.soldAs==='tablet'?'Individual Units':'Whole Unit')+
-    (s.groupId?' | Part of a batch sale — editing this only changes this one item':'');
+  document.getElementById('se-med-name').textContent=s.medicineName+(isExtra?' (Extra Charge)':'');
+  document.getElementById('se-med-meta').textContent=isExtra
+    ? 'Extra charge — no stock or cost linked to this entry.'+(s.groupId?' Part of a batch sale.':'')
+    : s.qtyType+' | Sold as: '+(s.soldAs==='tablet'?'Individual Units':'Whole Unit')+
+      (s.groupId?' | Part of a batch sale — editing this only changes this one item':'');
   document.getElementById('se-qty').value=s.qtySold;
   document.getElementById('se-price').value=parseFloat(s.sellingPricePerUnit||0).toFixed(2);
   document.getElementById('se-cost').value=parseFloat(s.costPricePerUnit||0).toFixed(2);
   document.getElementById('se-date').value=s.date;
 
+  // Extras have no quantity concept worth editing (always 1) — hide it to avoid confusion
+  document.getElementById('se-qty').closest('.field').style.display=isExtra?'none':'block';
+  document.getElementById('se-cost').closest('.field').style.display=isExtra?'none':'block';
+
   var stockItem=RP.getStock().find(function(x){return x.id===s.stockId;});
-  if(stockItem){
+  if(isExtra){
+    document.getElementById('se-stock-warn').textContent='This is an extra charge — no inventory is affected by editing it.';
+  } else if(stockItem){
     var tps=parseFloat(stockItem.tabletsPerStrip)||0;
     var avail=parseFloat(stockItem.quantity)||0;
     var oldDeduct=(s.soldAs==='tablet'&&tps>0)?(parseFloat(s.qtySold)||0)/tps:(parseFloat(s.qtySold)||0);
@@ -1069,38 +1226,48 @@ function saveSaleEdit(){
   if(!saleEditId) return;
   var s=RP_SALES.getById(saleEditId);
   if(!s) return;
+  var isExtra=s.soldAs==='extra';
 
-  var qty=parseFloat(document.getElementById('se-qty').value)||0;
+  var qty=isExtra?1:(parseFloat(document.getElementById('se-qty').value)||0);
   var price=parseFloat(document.getElementById('se-price').value)||0;
-  var cost=parseFloat(document.getElementById('se-cost').value)||0;
+  var cost=isExtra?0:(parseFloat(document.getElementById('se-cost').value)||0);
   var date=document.getElementById('se-date').value||s.date;
 
-  if(qty<=0){ RP.toast('Quantity must be greater than 0.','error'); return; }
+  if(!isExtra && qty<=0){ RP.toast('Quantity must be greater than 0.','error'); return; }
+  if(isExtra && price<=0){ RP.toast('Amount must be greater than 0.','error'); return; }
 
-  var stockItem=RP.getStock().find(function(x){return x.id===s.stockId;});
-  if(stockItem){
-    var tps=parseFloat(stockItem.tabletsPerStrip)||0;
-    var avail=parseFloat(stockItem.quantity)||0;
-    var oldDeduct=(s.soldAs==='tablet'&&tps>0)?(parseFloat(s.qtySold)||0)/tps:(parseFloat(s.qtySold)||0);
-    var newDeduct=(s.soldAs==='tablet'&&tps>0)?qty/tps:qty;
-    var availableForThis=avail+oldDeduct;
-    if(newDeduct>availableForThis+0.0001){
-      var maxDisplay=(s.soldAs==='tablet'&&tps>0)?Math.floor(availableForThis*tps):Math.floor(availableForThis);
-      RP.toast('Not enough stock. Max available: '+maxDisplay,'error');
-      return;
+  if(!isExtra){
+    var stockItem=RP.getStock().find(function(x){return x.id===s.stockId;});
+    if(stockItem){
+      var tps=parseFloat(stockItem.tabletsPerStrip)||0;
+      var avail=parseFloat(stockItem.quantity)||0;
+      var oldDeduct=(s.soldAs==='tablet'&&tps>0)?(parseFloat(s.qtySold)||0)/tps:(parseFloat(s.qtySold)||0);
+      var newDeduct=(s.soldAs==='tablet'&&tps>0)?qty/tps:qty;
+      var availableForThis=avail+oldDeduct;
+      if(newDeduct>availableForThis+0.0001){
+        var maxDisplay=(s.soldAs==='tablet'&&tps>0)?Math.floor(availableForThis*tps):Math.floor(availableForThis);
+        RP.toast('Not enough stock. Max available: '+maxDisplay,'error');
+        return;
+      }
     }
   }
 
   var totalSelling=qty*price;
   var totalCost=qty*cost;
   var profit=totalSelling-totalCost;
-  var grossRef=parseFloat(s.mrpPerUnit||0)*qty;
-  var discountPct=grossRef>0?((grossRef-totalSelling)/grossRef*100):(parseFloat(s.discountPct)||0);
+  var discountPct;
+  if(isExtra){
+    discountPct=0; // discount isn't a meaningful concept for extra charges
+  } else {
+    var grossRef=parseFloat(s.mrpPerUnit||0)*qty;
+    discountPct=grossRef>0?((grossRef-totalSelling)/grossRef*100):(parseFloat(s.discountPct)||0);
+  }
 
   RP_SALES.update(saleEditId, {
     qtySold: qty,
     sellingPricePerUnit: price,
     costPricePerUnit: cost,
+    mrpPerUnit: isExtra?price:s.mrpPerUnit, // keep extras' reference amount in sync with the new price
     totalSelling: parseFloat(totalSelling.toFixed(2)),
     totalCost: parseFloat(totalCost.toFixed(2)),
     profit: parseFloat(profit.toFixed(2)),
