@@ -7,6 +7,15 @@
 <link rel="icon" href="pp.png">
 <link rel="stylesheet" href="rp-styles.css"/>
 <style>
+  .tab-switcher{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;max-width:420px;}
+  .tab-btn{
+    flex:1;padding:11px 16px;background:var(--surface2);border:none;cursor:pointer;
+    font-family:'DM Sans',sans-serif;font-weight:600;font-size:.88rem;color:var(--muted);
+  }
+  .tab-btn.active{background:var(--accent);color:#fff;}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+
   .sale-layout{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;}
   @media(max-width:960px){.sale-layout{grid-template-columns:1fr;}}
 
@@ -141,7 +150,71 @@
   </div>
 </div>
 
+<!-- EDIT SALE MODAL -->
+<div class="modal-overlay" id="sale-edit-modal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <h3>Edit Sale Entry</h3>
+      <span class="modal-close" onclick="closeSaleEdit()">&#10005;</span>
+    </div>
+    <div style="padding:4px 0;">
+      <p style="font-weight:700;margin-bottom:2px;" id="se-med-name"></p>
+      <p class="hint" id="se-med-meta" style="margin-bottom:16px;"></p>
+
+      <div class="form-grid form-grid-2">
+        <div class="field">
+          <label>Quantity Sold</label>
+          <input type="number" id="se-qty" min="0" step="any" oninput="recalcSaleEdit()"/>
+        </div>
+        <div class="field">
+          <label>Selling Price / Unit (Rs.)</label>
+          <input type="number" id="se-price" min="0" step="0.01" oninput="recalcSaleEdit()"/>
+        </div>
+        <div class="field">
+          <label>Sale Date</label>
+          <input type="date" id="se-date"/>
+        </div>
+        <div class="field">
+          <label>Cost Price / Unit (Rs.)
+            <span class="hint">usually leave as recorded</span>
+          </label>
+          <input type="number" id="se-cost" min="0" step="0.01" oninput="recalcSaleEdit()"/>
+        </div>
+      </div>
+
+      <div class="price-breakdown" style="margin-top:16px;">
+        <div class="pb-row"><span class="label">New Total Selling</span><span class="value" id="se-total-sell">Rs. 0.00</span></div>
+        <div class="pb-row"><span class="label">New Total Cost</span><span class="value" id="se-total-cost">Rs. 0.00</span></div>
+        <div class="pb-row profit-row" id="se-profit-row"><span class="label">New Profit</span><span class="value" id="se-profit">Rs. 0.00</span></div>
+      </div>
+
+      <p class="hint" style="margin-top:10px;" id="se-stock-warn"></p>
+
+      <div class="flex-end" style="margin-top:20px;">
+        <button class="btn btn-secondary" onclick="closeSaleEdit()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSaleEdit()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE SALE MODAL -->
+<div class="modal-overlay" id="sale-del-modal">
+  <div class="modal" style="max-width:380px;text-align:center;">
+    <div style="font-size:40px;margin-bottom:12px;">&#128465;</div>
+    <h3>Delete this sale entry?</h3>
+    <p style="color:var(--muted);margin:12px 0 24px;">
+      This cannot be undone. The sold quantity will be added back to stock automatically.
+    </p>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-secondary" onclick="closeSaleDelModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmSaleDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
 <div class="page">
+
 <div class="container">
 
   <div class="page-header">
@@ -150,6 +223,13 @@
   </div>
 
   <div id="sale-sync-banner"></div>
+
+  <div class="tab-switcher">
+    <button class="tab-btn active" onclick="switchSaleTab('record')">Record Sale</button>
+    <button class="tab-btn" onclick="switchSaleTab('view')">View &amp; Edit Sales</button>
+  </div>
+
+  <div class="tab-panel active" id="tab-record">
 
   <!-- Profit Summary Cards -->
   <div class="profit-summary-grid" id="profit-summary">
@@ -266,6 +346,36 @@
     </div>
   </div>
 
+  </div><!-- /tab-record -->
+
+  <div class="tab-panel" id="tab-view">
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap;gap:12px;padding-bottom:16px;">
+        <div class="toolbar" style="margin:0;flex:1;min-width:0;">
+          <div class="search-box">
+            <span class="search-icon">&#128269;</span>
+            <input type="text" id="sale-search-input" placeholder="Search medicine..." oninput="renderSalesTable()"/>
+          </div>
+        </div>
+        <input type="date" id="sale-filter-from" onchange="renderSalesTable()"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+          color:var(--text);padding:8px 10px;font-family:'DM Sans',sans-serif;font-size:.83rem;" title="From date"/>
+        <input type="date" id="sale-filter-to" onchange="renderSalesTable()"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+          color:var(--text);padding:8px 10px;font-family:'DM Sans',sans-serif;font-size:.83rem;" title="To date"/>
+        <button class="btn btn-sm btn-secondary" onclick="clearSaleFilters()">Clear</button>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap" id="sales-table-wrap">
+          <div class="empty-state">
+            <div class="empty-icon" style="font-size:36px;">&#128200;</div>
+            <p>No sales recorded yet.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /tab-view -->
+
 </div>
 </div>
 
@@ -304,7 +414,7 @@ function esc(s){
   return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-window._rpOnSyncComplete=function(){ renderProfitSummary(); renderHistory(); };
+window._rpOnSyncComplete=function(){ renderProfitSummary(); renderHistory(); renderSalesTable(); };
 RP.showSyncBanner('sale-sync-banner');
 
 // Set today's date
@@ -834,6 +944,198 @@ function renderHistory(){
     }).join('');
 }
 renderHistory();
+
+/* ============================================================
+   TABS — Record Sale / View & Edit Sales
+============================================================ */
+function switchSaleTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(function(b,i){
+    b.classList.toggle('active', (i===0&&tab==='record')||(i===1&&tab==='view'));
+  });
+  document.getElementById('tab-record').classList.toggle('active', tab==='record');
+  document.getElementById('tab-view').classList.toggle('active', tab==='view');
+  if(tab==='view') renderSalesTable();
+}
+
+function clearSaleFilters(){
+  document.getElementById('sale-search-input').value='';
+  document.getElementById('sale-filter-from').value='';
+  document.getElementById('sale-filter-to').value='';
+  renderSalesTable();
+}
+
+/* ============================================================
+   VIEW & EDIT SALES — searchable table with per-row Edit/Delete
+============================================================ */
+function renderSalesTable(){
+  var wrap=document.getElementById('sales-table-wrap');
+  if(!wrap) return;
+  var q=(document.getElementById('sale-search-input').value||'').trim().toLowerCase();
+  var from=document.getElementById('sale-filter-from').value;
+  var to=document.getElementById('sale-filter-to').value;
+
+  var sales=[].concat(RP_SALES.getAll()).reverse(); // most recent first
+  sales=sales.filter(function(s){
+    if(q && (s.medicineName||'').toLowerCase().indexOf(q)===-1) return false;
+    if(from && s.date < from) return false;
+    if(to && s.date > to) return false;
+    return true;
+  });
+
+  if(!sales.length){
+    wrap.innerHTML='<div class="empty-state"><div class="empty-icon" style="font-size:36px;">&#128200;</div><p>No sales found.</p></div>';
+    return;
+  }
+
+  wrap.innerHTML='<table>'+
+    '<thead><tr>'+
+      '<th>Date</th><th>Medicine</th><th>Qty</th><th>Unit</th>'+
+      '<th>Price/Unit</th><th>Discount</th><th>Total</th><th>Profit</th><th>Batch</th><th></th>'+
+    '</tr></thead>'+
+    '<tbody>'+sales.map(function(s){
+      var profitColor=s.profit>=0?'var(--success)':'var(--danger)';
+      var discTxt=(parseFloat(s.discountPct)||0).toFixed(1)+'%';
+      return '<tr>'+
+        '<td>'+RP.fmtDate(s.date)+'</td>'+
+        '<td><strong>'+esc(s.medicineName)+'</strong></td>'+
+        '<td class="mono">'+s.qtySold+'</td>'+
+        '<td>'+esc(s.qtyType)+'</td>'+
+        '<td class="mono">Rs.'+parseFloat(s.sellingPricePerUnit).toFixed(2)+'</td>'+
+        '<td class="mono">'+discTxt+'</td>'+
+        '<td class="mono">Rs.'+parseFloat(s.totalSelling).toFixed(2)+'</td>'+
+        '<td class="mono" style="color:'+profitColor+';font-weight:600;">'+(s.profit>=0?'+':'')+'Rs.'+parseFloat(s.profit).toFixed(2)+'</td>'+
+        '<td>'+(s.groupId?'<span class="badge badge-info" style="font-size:.68rem;">Batch</span>':'—')+'</td>'+
+        '<td style="white-space:nowrap;">'+
+          '<button class="btn btn-sm btn-secondary" onclick="openSaleEdit(\''+s.id+'\')">Edit</button> '+
+          '<button class="btn btn-sm btn-danger" onclick="openSaleDelModal(\''+s.id+'\')">Del</button>'+
+        '</td>'+
+      '</tr>';
+    }).join('')+
+    '</tbody></table>';
+}
+
+/* ---- Edit ---- */
+var saleEditId=null;
+
+function openSaleEdit(id){
+  var s=RP_SALES.getById(id);
+  if(!s) return;
+  saleEditId=id;
+  document.getElementById('se-med-name').textContent=s.medicineName;
+  document.getElementById('se-med-meta').textContent=
+    s.qtyType+' | Sold as: '+(s.soldAs==='tablet'?'Individual Units':'Whole Unit')+
+    (s.groupId?' | Part of a batch sale — editing this only changes this one item':'');
+  document.getElementById('se-qty').value=s.qtySold;
+  document.getElementById('se-price').value=parseFloat(s.sellingPricePerUnit||0).toFixed(2);
+  document.getElementById('se-cost').value=parseFloat(s.costPricePerUnit||0).toFixed(2);
+  document.getElementById('se-date').value=s.date;
+
+  var stockItem=RP.getStock().find(function(x){return x.id===s.stockId;});
+  if(stockItem){
+    var tps=parseFloat(stockItem.tabletsPerStrip)||0;
+    var avail=parseFloat(stockItem.quantity)||0;
+    var oldDeduct=(s.soldAs==='tablet'&&tps>0)?(parseFloat(s.qtySold)||0)/tps:(parseFloat(s.qtySold)||0);
+    var maxNative=avail+oldDeduct;
+    var maxDisplay=(s.soldAs==='tablet'&&tps>0)?Math.floor(maxNative*tps):Math.floor(maxNative);
+    document.getElementById('se-stock-warn').textContent='Max quantity you can set (based on current stock): '+maxDisplay;
+  } else {
+    document.getElementById('se-stock-warn').textContent='Note: original stock item no longer exists — quantity can be edited but won\'t adjust inventory.';
+  }
+
+  recalcSaleEdit();
+  document.getElementById('sale-edit-modal').classList.add('open');
+}
+
+function closeSaleEdit(){
+  document.getElementById('sale-edit-modal').classList.remove('open');
+  saleEditId=null;
+}
+
+function recalcSaleEdit(){
+  var qty=parseFloat(document.getElementById('se-qty').value)||0;
+  var price=parseFloat(document.getElementById('se-price').value)||0;
+  var cost=parseFloat(document.getElementById('se-cost').value)||0;
+  var totalSell=qty*price;
+  var totalCost=qty*cost;
+  var profit=totalSell-totalCost;
+  document.getElementById('se-total-sell').textContent='Rs. '+totalSell.toFixed(2);
+  document.getElementById('se-total-cost').textContent='Rs. '+totalCost.toFixed(2);
+  var profitEl=document.getElementById('se-profit');
+  profitEl.textContent=(profit>=0?'+':'')+'Rs. '+profit.toFixed(2);
+  document.getElementById('se-profit-row').classList.toggle('loss', profit<0);
+}
+
+function saveSaleEdit(){
+  if(!saleEditId) return;
+  var s=RP_SALES.getById(saleEditId);
+  if(!s) return;
+
+  var qty=parseFloat(document.getElementById('se-qty').value)||0;
+  var price=parseFloat(document.getElementById('se-price').value)||0;
+  var cost=parseFloat(document.getElementById('se-cost').value)||0;
+  var date=document.getElementById('se-date').value||s.date;
+
+  if(qty<=0){ RP.toast('Quantity must be greater than 0.','error'); return; }
+
+  var stockItem=RP.getStock().find(function(x){return x.id===s.stockId;});
+  if(stockItem){
+    var tps=parseFloat(stockItem.tabletsPerStrip)||0;
+    var avail=parseFloat(stockItem.quantity)||0;
+    var oldDeduct=(s.soldAs==='tablet'&&tps>0)?(parseFloat(s.qtySold)||0)/tps:(parseFloat(s.qtySold)||0);
+    var newDeduct=(s.soldAs==='tablet'&&tps>0)?qty/tps:qty;
+    var availableForThis=avail+oldDeduct;
+    if(newDeduct>availableForThis+0.0001){
+      var maxDisplay=(s.soldAs==='tablet'&&tps>0)?Math.floor(availableForThis*tps):Math.floor(availableForThis);
+      RP.toast('Not enough stock. Max available: '+maxDisplay,'error');
+      return;
+    }
+  }
+
+  var totalSelling=qty*price;
+  var totalCost=qty*cost;
+  var profit=totalSelling-totalCost;
+  var grossRef=parseFloat(s.mrpPerUnit||0)*qty;
+  var discountPct=grossRef>0?((grossRef-totalSelling)/grossRef*100):(parseFloat(s.discountPct)||0);
+
+  RP_SALES.update(saleEditId, {
+    qtySold: qty,
+    sellingPricePerUnit: price,
+    costPricePerUnit: cost,
+    totalSelling: parseFloat(totalSelling.toFixed(2)),
+    totalCost: parseFloat(totalCost.toFixed(2)),
+    profit: parseFloat(profit.toFixed(2)),
+    discountPct: parseFloat(discountPct.toFixed(2)),
+    date: date
+  });
+
+  closeSaleEdit();
+  renderSalesTable();
+  renderProfitSummary();
+  renderHistory();
+  RP.toast('Sale entry updated.','success');
+}
+
+/* ---- Delete ---- */
+var saleDeleteId=null;
+
+function openSaleDelModal(id){
+  saleDeleteId=id;
+  document.getElementById('sale-del-modal').classList.add('open');
+}
+function closeSaleDelModal(){
+  document.getElementById('sale-del-modal').classList.remove('open');
+  saleDeleteId=null;
+}
+function confirmSaleDelete(){
+  if(!saleDeleteId) return;
+  RP_SALES.delete(saleDeleteId);
+  closeSaleDelModal();
+  renderSalesTable();
+  renderProfitSummary();
+  renderHistory();
+  updateBadge();
+  RP.toast('Sale entry deleted and stock restored.','warn');
+}
 
 /* ============================================================
    CSV DOWNLOAD

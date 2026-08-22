@@ -15,7 +15,7 @@
 const RP = {
 
   // ---- IMPORTANT: Replace with your deployed Apps Script URL ----
-      SHEET_URL: 'https://script.google.com/macros/s/AKfycbwJCjyfMvhYedzKXE-AAXC89WcTk4wBbVPEL7wVYdxGer3irh2rpNuEDjX3tpQGE_WH0w/exec',
+      SHEET_URL: 'https://script.google.com/macros/s/AKfycbxtyoQm_GzFmQ_h7xrhGb8v7wxgdIsDf_N_gVAi5iS6x4CTYcasiJFWhNXlN4EeBB9Ndw/exec',
 
   OWNER_EMAIL: 'saivenkatachala@gmail.com',
 
@@ -430,6 +430,70 @@ const RP_SALES = {
     }
     RP.postToSheet({ action: 'addSale', data: sale });
     return sale;
+  },
+
+  // Fetch a single sale by id (used by the edit modal)
+  getById(id){
+    return this._get().find(s => s.id === id) || null;
+  },
+
+  // Update an existing sale record. `updates` is a partial object merged
+  // onto the existing sale. Handles reconciling the stock quantity that
+  // was previously deducted for this sale against the new qty/soldAs —
+  // i.e. adds back the old deduction and applies the new one.
+  update(id, updates){
+    const sales = this._get();
+    const idx = sales.findIndex(s => s.id === id);
+    if(idx === -1) return null;
+    const oldSale = sales[idx];
+
+    // ---- Reconcile stock quantity (old deduction reversed, new one applied) ----
+    const stock = RP.getStock();
+    const sIdx = stock.findIndex(x => x.id === oldSale.stockId);
+    if(sIdx !== -1){
+      const tps = parseFloat(stock[sIdx].tabletsPerStrip) || 0;
+      const oldQty  = parseFloat(oldSale.qtySold) || 0;
+      const newQty  = parseFloat(updates.qtySold != null ? updates.qtySold : oldSale.qtySold) || 0;
+      const soldAs  = updates.soldAs || oldSale.soldAs || 'strip';
+      const oldDeduct = (oldSale.soldAs === 'tablet' && tps > 0) ? oldQty / tps : oldQty;
+      const newDeduct = (soldAs === 'tablet' && tps > 0) ? newQty / tps : newQty;
+      const delta = newDeduct - oldDeduct; // positive = need to deduct more; negative = give back
+      const current = parseFloat(stock[sIdx].quantity) || 0;
+      stock[sIdx].quantity = Math.max(0, parseFloat((current - delta).toFixed(3)));
+      RP.saveStock(stock);
+      RP.postToSheet({ action: 'updateStock', data: stock[sIdx] });
+    }
+
+    const updatedSale = Object.assign({}, oldSale, updates, { id: oldSale.id });
+    sales[idx] = updatedSale;
+    this._set(sales);
+    RP.postToSheet({ action: 'updateSale', data: updatedSale });
+    return updatedSale;
+  },
+
+  // Delete a sale record and give back the stock quantity it had deducted.
+  delete(id){
+    const sales = this._get();
+    const idx = sales.findIndex(s => s.id === id);
+    if(idx === -1) return false;
+    const sale = sales[idx];
+
+    const stock = RP.getStock();
+    const sIdx = stock.findIndex(x => x.id === sale.stockId);
+    if(sIdx !== -1){
+      const tps = parseFloat(stock[sIdx].tabletsPerStrip) || 0;
+      const qty = parseFloat(sale.qtySold) || 0;
+      const deduct = (sale.soldAs === 'tablet' && tps > 0) ? qty / tps : qty;
+      const current = parseFloat(stock[sIdx].quantity) || 0;
+      stock[sIdx].quantity = parseFloat((current + deduct).toFixed(3));
+      RP.saveStock(stock);
+      RP.postToSheet({ action: 'updateStock', data: stock[sIdx] });
+    }
+
+    sales.splice(idx, 1);
+    this._set(sales);
+    RP.postToSheet({ action: 'deleteSale', id: id });
+    return true;
   },
 
   // Profit = (sellingPrice - costPrice) * qty
