@@ -308,12 +308,22 @@ document.getElementById('greeting').textContent=
   ', here\'s what\'s happening at the pharmacy today.';
 document.getElementById('today-date').textContent=new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
 
+// Format a stock quantity for display: whole numbers show clean ("50"),
+// fractional quantities (from loose-unit sales, e.g. selling individual
+// tablets out of a strip) show up to 2 decimal places ("4.7") instead of
+// being silently rounded away.
+function fmtQty(q){
+  var n=parseFloat(q)||0;
+  var rounded=Math.round(n*100)/100;
+  return String(rounded);
+}
+
 function buildStats(){
   const stock=RP.getStock();
   const bills=RP.getBills();
   const alerts=RP.computeAlerts();
-  const low=stock.filter(s=>parseInt(s.quantity)<=RP.LOW_STOCK&&parseInt(s.quantity)>0).length;
-  const out=stock.filter(s=>parseInt(s.quantity)===0).length;
+  const low=stock.filter(s=>parseFloat(s.quantity)<=RP.LOW_STOCK&&parseFloat(s.quantity)>0).length;
+  const out=stock.filter(s=>parseFloat(s.quantity)===0).length;
   document.getElementById('stat-grid').innerHTML=`
     <div class="kpi-card">
       <div class="kpi-top"><div class="kpi-icon c-accent">📦</div><span class="kpi-trend flat">Live</span></div>
@@ -383,7 +393,8 @@ function buildRecentTable(){
     </tr></thead>
     <tbody>
       ${stock.map(s=>{
-        const qty=parseInt(s.quantity)||0;
+        const qty=parseFloat(s.quantity)||0;
+        const qtyDisplay=fmtQty(qty);
         let badge='<span class="badge badge-success">✓ OK</span>';
         if(qty===0) badge='<span class="badge badge-muted">Out</span>';
         else if(qty<=RP.LOW_STOCK) badge='<span class="badge badge-warn">⚠ Low</span>';
@@ -391,7 +402,7 @@ function buildRecentTable(){
           <td><strong>${s.name}</strong></td>
           <td><span class="badge badge-info">${s.medType}</span></td>
           <td>${s.brand||'—'}</td>
-          <td class="mono">${qty}</td>
+          <td class="mono">${qtyDisplay}</td>
           <td>${s.qtyType}</td>
           <td>${RP.fmtDate(s.expiry)}</td>
           <td>${badge}</td>
@@ -409,7 +420,7 @@ function showAutoPopups(){
   const warnDate=new Date(); warnDate.setMonth(warnDate.getMonth()+RP.EXPIRY_WARN_MONTHS);
   let critical=[];
   stock.forEach(s=>{
-    const qty=parseInt(s.quantity)||0;
+    const qty=parseFloat(s.quantity)||0;
     if(qty<=RP.LOW_STOCK&&qty>0&&!dismissed.includes('popup_low_'+s.id))
       critical.push({type:'low',s});
     if(s.expiry){

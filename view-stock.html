@@ -66,7 +66,7 @@
         <div class="field"><label>Quantity Type</label>
           <select id="e-qtyType"></select></div>
         <div class="field"><label>Stock Available</label>
-          <input type="number" id="e-quantity" min="0"/></div>
+          <input type="number" id="e-quantity" min="0" step="any"/></div>
         <div class="field"><label>Expiry Date</label>
           <input type="date" id="e-expiry"/></div>
 
@@ -259,6 +259,16 @@ var currentPage=1;
 var editId=null;
 var deleteId=null;
 
+// Format a stock quantity for display: whole numbers show clean ("50"),
+// fractional quantities (from loose-unit sales, e.g. selling individual
+// tablets out of a strip) show up to 2 decimal places ("4.7") instead of
+// being silently rounded away.
+function fmtQty(q){
+  var n=parseFloat(q)||0;
+  var rounded=Math.round(n*100)/100;
+  return String(rounded);
+}
+
 /* ---- Filter pipeline ---- */
 function getFiltered(){
   var q=(document.getElementById('search-input').value||'').toLowerCase();
@@ -268,7 +278,7 @@ function getFiltered(){
   var warnDate=new Date(); warnDate.setMonth(warnDate.getMonth()+RP.EXPIRY_WARN_MONTHS);
 
   return RP.getStock().filter(function(s){
-    var qty=parseInt(s.quantity)||0;
+    var qty=parseFloat(s.quantity)||0;
     var exp=s.expiry?new Date(s.expiry):null;
 
     // Search
@@ -312,7 +322,8 @@ function renderTable(){
   var warnDate=new Date(); warnDate.setMonth(warnDate.getMonth()+RP.EXPIRY_WARN_MONTHS);
 
   var rows=slice.map(function(s,i){
-    var qty=parseInt(s.quantity)||0;
+    var qty=parseFloat(s.quantity)||0;
+    var qtyDisplay=fmtQty(qty); // whole numbers show clean (e.g. "50"); fractions show up to 2dp (e.g. "4.7")
     var exp=s.expiry?new Date(s.expiry):null;
     var rowNum=(currentPage-1)*pp+i+1;
 
@@ -352,7 +363,7 @@ function renderTable(){
         (s.notes?'<br><span style="font-size:.72rem;color:var(--muted);">'+s.notes+'</span>':'')+
       '</td>'+
       '<td><span class="badge badge-info" style="font-size:.74rem;">'+s.medType+'</span></td>'+
-      '<td class="mono" style="font-size:.9rem;font-weight:700;">'+qty+'</td>'+
+      '<td class="mono" style="font-size:.9rem;font-weight:700;">'+qtyDisplay+'</td>'+
       '<td style="font-size:.83rem;">'+s.qtyType+'</td>'+
       '<td style="font-size:.8rem;white-space:nowrap;">'+pricingHtml+'</td>'+
       '<td style="font-size:.82rem;">'+expDisplay+'</td>'+
@@ -500,7 +511,7 @@ function saveEdit(){
     name:      document.getElementById('e-name').value.trim(),
     brand:     document.getElementById('e-brand').value.trim(),
     qtyType:   document.getElementById('e-qtyType').value,
-    quantity:  parseInt(document.getElementById('e-quantity').value)||0,
+    quantity:  parseFloat(parseFloat(document.getElementById('e-quantity').value).toFixed(3))||0,
     expiry:    document.getElementById('e-expiry').value,
     notes:     document.getElementById('e-notes').value.trim(),
     costPriceBase: costBase,

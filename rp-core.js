@@ -15,7 +15,7 @@
 const RP = {
 
   // ---- IMPORTANT: Replace with your deployed Apps Script URL ----
-      SHEET_URL: 'https://script.google.com/macros/s/AKfycbxtyoQm_GzFmQ_h7xrhGb8v7wxgdIsDf_N_gVAi5iS6x4CTYcasiJFWhNXlN4EeBB9Ndw/exec',
+      SHEET_URL: 'https://script.google.com/macros/s/AKfycbz4k9wPjFw1lkGW0B-RtOzYHrMA5zBQeYSahyXUpclRnCEdE836iLG6c55ODg-VLUCI/exec',
 
   OWNER_EMAIL: 'saivenkatachala@gmail.com',
 
@@ -224,6 +224,10 @@ const RP = {
   },
 
   // Add a bill and deduct stock
+  // NOTE: billing.html does its own stock deduction directly (it needs to
+  // support fractional deduction when items are sold as loose units rather
+  // than whole packs) and does not call this function — it's kept here for
+  // any future caller, fixed to handle fractional quantities correctly.
   addBill(bill){
     bill.id        = bill.id || this.uid();
     bill.createdOn = bill.createdOn || new Date().toISOString();
@@ -231,12 +235,15 @@ const RP = {
     bills.push(bill);
     this.saveBills(bills);
 
-    // Deduct stock quantities
+    // Deduct stock quantities — use each item's stockDeduct if provided
+    // (handles fractional deduction for loose-unit sales), else its qty.
     const stock = this.getStock();
     (bill.items || []).forEach(item => {
       const idx = stock.findIndex(s => s.id === item.medId);
       if(idx !== -1){
-        stock[idx].quantity = Math.max(0, (parseInt(stock[idx].quantity)||0) - item.qty);
+        const deduct = item.stockDeduct != null ? parseFloat(item.stockDeduct) : parseFloat(item.qty);
+        const current = parseFloat(stock[idx].quantity) || 0;
+        stock[idx].quantity = Math.max(0, parseFloat((current - (deduct || 0)).toFixed(3)));
       }
     });
     this.saveStock(stock);
@@ -312,12 +319,12 @@ const RP = {
     warnDate.setMonth(warnDate.getMonth() + this.EXPIRY_WARN_MONTHS);
 
     stock.forEach(item => {
-      const qty = parseInt(item.quantity) || 0;
+      const qty = parseFloat(item.quantity) || 0;
 
       if(qty > 0 && qty <= this.LOW_STOCK){
         const id = `low_${item.id}`;
         if(!dismissed.includes(id))
-          alerts.push({ id, type:'low', item, msg:`Low stock: ${item.name} (${qty} ${item.qtyType} left)` });
+          alerts.push({ id, type:'low', item, msg:`Low stock: ${item.name} (${Math.round(qty*100)/100} ${item.qtyType} left)` });
       }
       if(qty === 0){
         const id = `zero_${item.id}`;
@@ -419,12 +426,21 @@ const RP_SALES = {
     const sales = this._get();
     sales.push(sale);
     this._set(sales);
-    // Only deduct stock locally if caller hasn't already done it
+    // Only deduct stock locally if caller hasn't already done it.
+    // NOTE: in the current app, stock-sale.html always calls add(sale, true)
+    // and does its own tps-aware fractional deduction beforehand, so this
+    // branch doesn't currently run — but it's fixed to match that same
+    // logic (parseFloat + tablets-per-strip awareness) in case anything
+    // ever calls add() without pre-deducting.
     if(!skipStockDeduct){
       const stock = RP.getStock();
       const idx = stock.findIndex(s => s.id === sale.stockId);
       if(idx !== -1){
-        stock[idx].quantity = Math.max(0, (parseInt(stock[idx].quantity)||0) - (parseInt(sale.qtySold)||0));
+        const tps = parseFloat(stock[idx].tabletsPerStrip) || 0;
+        const qty = parseFloat(sale.qtySold) || 0;
+        const deduct = (sale.soldAs === 'tablet' && tps > 0) ? qty / tps : qty;
+        const current = parseFloat(stock[idx].quantity) || 0;
+        stock[idx].quantity = Math.max(0, parseFloat((current - deduct).toFixed(3)));
       }
       RP.saveStock(stock);
     }

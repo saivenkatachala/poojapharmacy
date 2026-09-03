@@ -355,7 +355,7 @@ function renderMedResults(row, query){
       return '<div class="med-result-item" data-id="'+m.id+'" onmousedown="selectMedResult(this)">'+
         '<div class="med-result-name">'+esc(m.name)+
           (m.brand?' <span class="med-result-brand">('+esc(m.brand)+')</span>':'')+'</div>'+
-        '<div class="med-result-meta">'+m.qty+' '+esc(m.qtyType)+(mrpTxt?' | '+mrpTxt:'')+subTxt+'</div>'+
+        '<div class="med-result-meta">'+fmtQty(m.qty)+' '+esc(m.qtyType)+(mrpTxt?' | '+mrpTxt:'')+subTxt+'</div>'+
       '</div>';
     }).join('');
   }
@@ -475,8 +475,11 @@ function applySellUnit(row){
     qtyInput.title='Max: '+availTablets+' individual units';
     priceInput.value=(m.mrpTablet>0?m.mrpTablet:(m.tps>0?m.mrp/m.tps:0)).toFixed(2);
   } else {
-    qtyInput.max=m.qty;
-    qtyInput.title='Max: '+m.qty+' '+m.qtyType;
+    // Selling as a WHOLE pack — can only sell whole units even if a
+    // fractional amount remains from earlier loose-unit sales.
+    var availWhole=Math.floor(m.qty);
+    qtyInput.max=availWhole;
+    qtyInput.title='Max: '+availWhole+' '+m.qtyType;
     priceInput.value=m.mrp>0?m.mrp.toFixed(2):'';
   }
   row.dataset.sellAs=sellAs;
@@ -817,6 +820,15 @@ function reprintBill(id){
 
 function esc(s){
   return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Format a stock quantity for display: whole numbers show clean ("50"),
+// fractional quantities (from loose-unit sales) show up to 2 decimal
+// places ("4.7") instead of raw floating-point noise.
+function fmtQty(q){
+  var n=parseFloat(q)||0;
+  var rounded=Math.round(n*100)/100;
+  return String(rounded);
 }
 
 // Init
