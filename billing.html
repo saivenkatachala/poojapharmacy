@@ -39,6 +39,8 @@
   .med-result-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);}
   .med-result-item:last-child{border-bottom:none;}
   .med-result-item:hover{background:var(--surface2);}
+  .med-result-item.med-result-out{cursor:not-allowed;background:rgba(255,77,109,.05);}
+  .med-result-item.med-result-out:hover{background:rgba(255,77,109,.09);}
   .med-result-name{font-size:.85rem;font-weight:600;color:var(--text);}
   .med-result-brand{font-weight:400;color:var(--muted);}
   .med-result-meta{font-size:.72rem;color:var(--muted);margin-top:2px;}
@@ -310,7 +312,6 @@ var currentBillData=null;
 /* ---- Build a flat, searchable list of in-stock medicines ---- */
 function buildMedList(){
   return RP.getStock()
-    .filter(function(s){ return parseFloat(s.quantity)>0; })
     .map(function(s){
       var mrp=parseFloat(s.mrp||s.mrpPerUnit||0);
       var cost=parseFloat(s.costPrice||s.costPricePerUnit||0);
@@ -350,12 +351,16 @@ function renderMedResults(row, query){
     resultsEl.innerHTML='<div class="med-result-empty">No matching stock found.</div>';
   } else {
     resultsEl.innerHTML=matches.map(function(m){
+      var outOfStock=m.qty<=0;
       var mrpTxt=m.mrp>0?'MRP:Rs.'+m.mrp.toFixed(2):'';
       var subTxt=m.tps>0?(' | '+m.tps+'/'+m.qtyType.replace(/s$/,'')):'';
-      return '<div class="med-result-item" data-id="'+m.id+'" onmousedown="selectMedResult(this)">'+
-        '<div class="med-result-name">'+esc(m.name)+
+      var metaTxt=outOfStock
+        ? '<span style="color:var(--danger);font-weight:700;">Out of Stock</span>'
+        : fmtQty(m.qty)+' '+esc(m.qtyType)+(mrpTxt?' | '+mrpTxt:'')+subTxt;
+      return '<div class="med-result-item'+(outOfStock?' med-result-out':'')+'" data-id="'+m.id+'" data-outofstock="'+outOfStock+'" onmousedown="selectMedResult(this)">'+
+        '<div class="med-result-name" style="'+(outOfStock?'color:var(--danger);':'')+'">'+esc(m.name)+
           (m.brand?' <span class="med-result-brand">('+esc(m.brand)+')</span>':'')+'</div>'+
-        '<div class="med-result-meta">'+fmtQty(m.qty)+' '+esc(m.qtyType)+(mrpTxt?' | '+mrpTxt:'')+subTxt+'</div>'+
+        '<div class="med-result-meta">'+metaTxt+'</div>'+
       '</div>';
     }).join('');
   }
@@ -385,6 +390,10 @@ function selectMedResult(el){
   var row=el.closest('.bill-item-row');
   var m=buildMedList().find(function(x){return x.id===id;});
   if(!m) return;
+  if(m.qty<=0){
+    RP.toast(m.name+' is out of stock — add stock first before selling it.','error');
+    return;
+  }
   var input=row.querySelector('.med-search-input');
   input.value=m.name+(m.brand?' ('+m.brand+')':'');
   row.querySelector('.med-id-input').value=m.id;
@@ -395,7 +404,7 @@ function selectMedResult(el){
 
 /* ---- Add a medicine row ---- */
 function addBillRow(){
-  if(!buildMedList().length){ RP.toast('No stock available. Add stock first.','warn'); return; }
+  if(!buildMedList().some(function(m){return m.qty>0;})){ RP.toast('No stock available. Add stock first.','warn'); return; }
   var id='br_'+RP.uid();
   billRowIds.push(id);
   var div=document.createElement('div');
