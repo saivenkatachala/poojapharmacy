@@ -1,17 +1,3 @@
-// ============================================================
-// Pooja Pharmacy — Core Data Engine v3.0
-// PRIMARY DATABASE : Google Sheets (shared across all devices)
-// LOCAL CACHE      : localStorage (speeds up page loads)
-// ============================================================
-//
-// HOW IT WORKS:
-//   WRITE  → always goes to Google Sheets first, then updates local cache
-//   READ   → fetches from Google Sheets on every page load, stores in cache
-//   CACHE  → used only while the Sheet fetch is in-flight (instant display)
-//
-// This means ALL devices always see the SAME data.
-// ============================================================
-
 const RP = {
 
   // ---- IMPORTANT: Replace with your deployed Apps Script URL ----
@@ -224,10 +210,6 @@ const RP = {
   },
 
   // Add a bill and deduct stock
-  // NOTE: billing.html does its own stock deduction directly (it needs to
-  // support fractional deduction when items are sold as loose units rather
-  // than whole packs) and does not call this function — it's kept here for
-  // any future caller, fixed to handle fractional quantities correctly.
   addBill(bill){
     bill.id        = bill.id || this.uid();
     bill.createdOn = bill.createdOn || new Date().toISOString();
@@ -235,15 +217,12 @@ const RP = {
     bills.push(bill);
     this.saveBills(bills);
 
-    // Deduct stock quantities — use each item's stockDeduct if provided
-    // (handles fractional deduction for loose-unit sales), else its qty.
+    // Deduct stock quantities
     const stock = this.getStock();
     (bill.items || []).forEach(item => {
       const idx = stock.findIndex(s => s.id === item.medId);
       if(idx !== -1){
-        const deduct = item.stockDeduct != null ? parseFloat(item.stockDeduct) : parseFloat(item.qty);
-        const current = parseFloat(stock[idx].quantity) || 0;
-        stock[idx].quantity = Math.max(0, parseFloat((current - (deduct || 0)).toFixed(3)));
+        stock[idx].quantity = Math.max(0, (parseInt(stock[idx].quantity)||0) - item.qty);
       }
     });
     this.saveStock(stock);
@@ -319,12 +298,12 @@ const RP = {
     warnDate.setMonth(warnDate.getMonth() + this.EXPIRY_WARN_MONTHS);
 
     stock.forEach(item => {
-      const qty = parseFloat(item.quantity) || 0;
+      const qty = parseInt(item.quantity) || 0;
 
       if(qty > 0 && qty <= this.LOW_STOCK){
         const id = `low_${item.id}`;
         if(!dismissed.includes(id))
-          alerts.push({ id, type:'low', item, msg:`Low stock: ${item.name} (${Math.round(qty*100)/100} ${item.qtyType} left)` });
+          alerts.push({ id, type:'low', item, msg:`Low stock: ${item.name} (${qty} ${item.qtyType} left)` });
       }
       if(qty === 0){
         const id = `zero_${item.id}`;
@@ -426,21 +405,12 @@ const RP_SALES = {
     const sales = this._get();
     sales.push(sale);
     this._set(sales);
-    // Only deduct stock locally if caller hasn't already done it.
-    // NOTE: in the current app, stock-sale.html always calls add(sale, true)
-    // and does its own tps-aware fractional deduction beforehand, so this
-    // branch doesn't currently run — but it's fixed to match that same
-    // logic (parseFloat + tablets-per-strip awareness) in case anything
-    // ever calls add() without pre-deducting.
+    // Only deduct stock locally if caller hasn't already done it
     if(!skipStockDeduct){
       const stock = RP.getStock();
       const idx = stock.findIndex(s => s.id === sale.stockId);
       if(idx !== -1){
-        const tps = parseFloat(stock[idx].tabletsPerStrip) || 0;
-        const qty = parseFloat(sale.qtySold) || 0;
-        const deduct = (sale.soldAs === 'tablet' && tps > 0) ? qty / tps : qty;
-        const current = parseFloat(stock[idx].quantity) || 0;
-        stock[idx].quantity = Math.max(0, parseFloat((current - deduct).toFixed(3)));
+        stock[idx].quantity = Math.max(0, (parseInt(stock[idx].quantity)||0) - (parseInt(sale.qtySold)||0));
       }
       RP.saveStock(stock);
     }
@@ -512,14 +482,15 @@ const RP_SALES = {
     return true;
   },
 
-  // Profit = (sellingPrice - costPrice) * qty
-  // costPrice here = cost per unit as entered in add-stock
+  // Profit = sum of each sale's stored .profit field.
+  // IMPORTANT: never recompute this from sellingPricePerUnit/costPricePerUnit/
+  // qtySold — those are rounded per-unit figures, and multiplying them back
+  // out doesn't perfectly reconstruct the original discount-adjusted total
+  // (item discount % + group/batch discount share). The .profit field is
+  // already the correct, precise value computed once at sale time (or
+  // recalculated correctly on edit) — trust it directly.
   getProfit(sales){
-    return (sales||this._get()).reduce((sum, s) => {
-      const profit = ((parseFloat(s.sellingPricePerUnit)||0) - (parseFloat(s.costPricePerUnit)||0))
-                     * (parseInt(s.qtySold)||0);
-      return sum + profit;
-    }, 0);
+    return (sales||this._get()).reduce((sum, s) => sum + (parseFloat(s.profit)||0), 0);
   },
 
   // Today's sales

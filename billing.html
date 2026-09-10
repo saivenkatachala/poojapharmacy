@@ -642,6 +642,7 @@ function submitBill(){
         medicineName:      item.medName,
         qtyType:           item.qtyType,
         qtySold:           item.qty,
+        soldAs:            item.soldAs || 'strip',
         costPricePerUnit:  item.costPricePerUnit,
         mrpPerUnit:        item.cost,        // the price charged on bill
         sellingPricePerUnit:item.cost,
