@@ -1,7 +1,21 @@
+// ============================================================
+// Rukmini Pharmacy — Core Data Engine v3.0
+// PRIMARY DATABASE : Google Sheets (shared across all devices)
+// LOCAL CACHE      : localStorage (speeds up page loads)
+// ============================================================
+//
+// HOW IT WORKS:
+//   WRITE  → always goes to Google Sheets first, then updates local cache
+//   READ   → fetches from Google Sheets on every page load, stores in cache
+//   CACHE  → used only while the Sheet fetch is in-flight (instant display)
+//
+// This means ALL devices always see the SAME data.
+// ============================================================
+
 const RP = {
 
   // ---- IMPORTANT: Replace with your deployed Apps Script URL ----
-      SHEET_URL: 'https://script.google.com/macros/s/AKfycbz4k9wPjFw1lkGW0B-RtOzYHrMA5zBQeYSahyXUpclRnCEdE836iLG6c55ODg-VLUCI/exec',
+      SHEET_URL: 'https://script.google.com/macros/s/AKfycbyKCRKblnliejpWlluC3yHrk0p2ZcEbz1n2Ke9rugy_MIideYJADZLGOBA85Xsw3ghd/exec',
 
   OWNER_EMAIL: 'saivenkatachala@gmail.com',
 
@@ -387,13 +401,10 @@ const RP_SALES = {
 
   getAll(){ return this._get(); },
 
-  // skipStockDeduct=true when caller (billing.html / stock-sale.html) already deducted stock
+  // skipStockDeduct=true when caller (billing.html) already deducted stock
   add(sale, skipStockDeduct){
     sale.id        = sale.id || RP.uid();
     sale.createdOn = sale.createdOn || new Date().toISOString();
-    // Tell the backend too — otherwise its own fallback deduction runs a
-    // SECOND time on top of the frontend's manual deduction (double-deduct bug).
-    sale.skipStockDeduct = !!skipStockDeduct;
     // Always ensure .date is a clean YYYY-MM-DD local date string
     // If caller passed it from the date input, keep it — it's already correct
     // If missing, generate from local device time (not UTC)
@@ -405,7 +416,7 @@ const RP_SALES = {
     const sales = this._get();
     sales.push(sale);
     this._set(sales);
-    // Only deduct stock locally if caller hasn't already done it
+    // Only deduct stock if caller hasn't already done it
     if(!skipStockDeduct){
       const stock = RP.getStock();
       const idx = stock.findIndex(s => s.id === sale.stockId);
@@ -418,79 +429,14 @@ const RP_SALES = {
     return sale;
   },
 
-  // Fetch a single sale by id (used by the edit modal)
-  getById(id){
-    return this._get().find(s => s.id === id) || null;
-  },
-
-  // Update an existing sale record. `updates` is a partial object merged
-  // onto the existing sale. Handles reconciling the stock quantity that
-  // was previously deducted for this sale against the new qty/soldAs —
-  // i.e. adds back the old deduction and applies the new one.
-  update(id, updates){
-    const sales = this._get();
-    const idx = sales.findIndex(s => s.id === id);
-    if(idx === -1) return null;
-    const oldSale = sales[idx];
-
-    // ---- Reconcile stock quantity (old deduction reversed, new one applied) ----
-    const stock = RP.getStock();
-    const sIdx = stock.findIndex(x => x.id === oldSale.stockId);
-    if(sIdx !== -1){
-      const tps = parseFloat(stock[sIdx].tabletsPerStrip) || 0;
-      const oldQty  = parseFloat(oldSale.qtySold) || 0;
-      const newQty  = parseFloat(updates.qtySold != null ? updates.qtySold : oldSale.qtySold) || 0;
-      const soldAs  = updates.soldAs || oldSale.soldAs || 'strip';
-      const oldDeduct = (oldSale.soldAs === 'tablet' && tps > 0) ? oldQty / tps : oldQty;
-      const newDeduct = (soldAs === 'tablet' && tps > 0) ? newQty / tps : newQty;
-      const delta = newDeduct - oldDeduct; // positive = need to deduct more; negative = give back
-      const current = parseFloat(stock[sIdx].quantity) || 0;
-      stock[sIdx].quantity = Math.max(0, parseFloat((current - delta).toFixed(3)));
-      RP.saveStock(stock);
-      RP.postToSheet({ action: 'updateStock', data: stock[sIdx] });
-    }
-
-    const updatedSale = Object.assign({}, oldSale, updates, { id: oldSale.id });
-    sales[idx] = updatedSale;
-    this._set(sales);
-    RP.postToSheet({ action: 'updateSale', data: updatedSale });
-    return updatedSale;
-  },
-
-  // Delete a sale record and give back the stock quantity it had deducted.
-  delete(id){
-    const sales = this._get();
-    const idx = sales.findIndex(s => s.id === id);
-    if(idx === -1) return false;
-    const sale = sales[idx];
-
-    const stock = RP.getStock();
-    const sIdx = stock.findIndex(x => x.id === sale.stockId);
-    if(sIdx !== -1){
-      const tps = parseFloat(stock[sIdx].tabletsPerStrip) || 0;
-      const qty = parseFloat(sale.qtySold) || 0;
-      const deduct = (sale.soldAs === 'tablet' && tps > 0) ? qty / tps : qty;
-      const current = parseFloat(stock[sIdx].quantity) || 0;
-      stock[sIdx].quantity = parseFloat((current + deduct).toFixed(3));
-      RP.saveStock(stock);
-      RP.postToSheet({ action: 'updateStock', data: stock[sIdx] });
-    }
-
-    sales.splice(idx, 1);
-    this._set(sales);
-    RP.postToSheet({ action: 'deleteSale', id: id });
-    return true;
-  },
-
-  // Profit = sum of each sale's stored .profit field.
-  // IMPORTANT: never recompute this from sellingPricePerUnit/costPricePerUnit/
-  // qtySold — those are rounded per-unit figures, and multiplying them back
-  // out doesn't perfectly reconstruct the original discount-adjusted total
-  // (item discount % + group/batch discount share). The .profit field is
-  // already the correct, precise value computed once at sale time (or
-  // recalculated correctly on edit) — trust it directly.
+  // Profit = (sellingPrice - costPrice) * qty
+  // costPrice here = cost per unit as entered in add-stock
   getProfit(sales){
-    return (sales||this._get()).reduce((sum, s) => sum + (parseFloat(s.profit)||0), 0);
+    return (sales||this._get()).reduce((sum, s) => {
+      const profit = ((parseFloat(s.sellingPricePerUnit)||0) - (parseFloat(s.costPricePerUnit)||0))
+                     * (parseInt(s.qtySold)||0);
+      return sum + profit;
+    }, 0);
   },
 
   // Today's sales
