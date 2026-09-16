@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Bill Generation — Rukmini Pharmacy</title>
+<title>Bill Generation — Pooja Pharmacy</title>
 <link rel="icon" href="pp.png">
 <link rel="stylesheet" href="rp-styles.css"/>
 <style>
@@ -20,6 +20,31 @@
     .bill-item-row{grid-template-columns:1fr 1fr;gap:8px;}
     .bill-item-row .med-sel-wrap{grid-column:1/-1;}
   }
+  .sell-as-select{
+    display:none;margin-top:6px;width:100%;
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:.8rem;
+  }
+  .med-search-input{
+    width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);font-family:'DM Sans',sans-serif;
+  }
+  .med-search-results{
+    display:none;position:absolute;top:100%;left:0;right:0;z-index:60;
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    max-height:280px;overflow-y:auto;margin-top:4px;
+    box-shadow:0 10px 28px rgba(0,0,0,.28);
+  }
+  .med-search-results.open{display:block;}
+  .med-result-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);}
+  .med-result-item:last-child{border-bottom:none;}
+  .med-result-item:hover{background:var(--surface2);}
+  .med-result-item.med-result-out{cursor:not-allowed;background:rgba(255,77,109,.05);}
+  .med-result-item.med-result-out:hover{background:rgba(255,77,109,.09);}
+  .med-result-name{font-size:.85rem;font-weight:600;color:var(--text);}
+  .med-result-brand{font-weight:400;color:var(--muted);}
+  .med-result-meta{font-size:.72rem;color:var(--muted);margin-top:2px;}
+  .med-result-empty{padding:12px;color:var(--muted);font-size:.82rem;text-align:center;}
   .remove-btn{
     background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.25);
     color:var(--danger);border-radius:8px;cursor:pointer;
@@ -105,13 +130,12 @@
 <body>
 <nav class="navbar">
   <a href="dashboard.html" class="navbar-brand">
-    <div class="brand-icon">&#128138;</div><span>Rukmini Pharmacy</span>
+    <div class="brand-icon">&#128138;</div><span>Pooja Pharmacy</span>
   </a>
   <div class="navbar-nav">
     <a href="dashboard.html" class="nav-link">&#127968; <span class="nav-text">Home</span></a>
     <a href="add-stock.html" class="nav-link">&#10133; <span class="nav-text">Add Stock</span></a>
     <a href="view-stock.html" class="nav-link">&#128230; <span class="nav-text">View Stock</span></a>
-    <a href="sort-stock.html" class="nav-link">&#8964; <span class="nav-text">Sort Stock</span></a>
     <a href="stock-sale.html" class="nav-link">&#128200; <span class="nav-text">Stock Sale</span></a>
     <a href="billing.html" class="nav-link active">&#128451; <span class="nav-text">Bill Generation</span></a>
     <a href="scan-stock.html" class="nav-link">&#128247; <span class="nav-text">Scan Stock</span></a>
@@ -195,7 +219,7 @@
           <div style="display:grid;grid-template-columns:2fr 80px 110px 34px;gap:10px;
             padding:0 0 8px;font-size:.71rem;font-weight:600;color:var(--muted);
             text-transform:uppercase;letter-spacing:.06em;">
-            <span>Medicine (MRP auto-filled)</span>
+            <span>Medicine (MRP auto-filled, Sell As shown if sub-units configured)</span>
             <span>Qty</span>
             <span>Unit Price (Rs)</span>
             <span></span>
@@ -219,7 +243,7 @@
 
           <div class="flex-end" style="margin-top:16px;">
             <button class="btn btn-secondary" onclick="resetBill()">Reset</button>
-            <button class="btn btn-primary" onclick="submitBill()">Generate Bill</button>
+            <button class="btn btn-primary" id="bill-submit-btn" onclick="submitBill()">Generate Bill</button>
           </div>
         </div>
       </div>
@@ -285,40 +309,117 @@ var billRowIds=[];
 var currentBillData=null;
 
 /* ---- Medicine dropdown options ---- */
-function getMedOptions(){
+/* ---- Build a flat, searchable list of in-stock medicines ---- */
+function buildMedList(){
   return RP.getStock()
-    .filter(function(s){ return parseInt(s.quantity)>0; })
     .map(function(s){
       var mrp=parseFloat(s.mrp||s.mrpPerUnit||0);
       var cost=parseFloat(s.costPrice||s.costPricePerUnit||0);
-      var label=s.name+(s.brand?' ('+s.brand+')':'')+
-        ' — '+s.quantity+' '+s.qtyType+
-        (mrp>0?' | MRP:Rs.'+mrp.toFixed(2):'');
-      return '<option value="'+s.id+'"'+
-        ' data-name="'+esc(s.name)+'"'+
-        ' data-brand="'+esc(s.brand||'')+'"'+
-        ' data-type="'+esc(s.medType)+'"'+
-        ' data-qty="'+s.quantity+'"'+
-        ' data-qtytype="'+esc(s.qtyType)+'"'+
-        ' data-mrp="'+mrp+'"'+
-        ' data-cost="'+cost+'">'+
-        label+'</option>';
+      var tps=parseFloat(s.tabletsPerStrip||0);
+      return {
+        id:s.id, name:s.name||'', brand:s.brand||'', medType:s.medType||'',
+        qty:parseFloat(s.quantity)||0, qtyType:s.qtyType||'',
+        mrp:mrp, cost:cost, tps:tps,
+        mrpTablet:parseFloat(s.mrpPerTablet||(tps>0?mrp/tps:0)),
+        costTablet:parseFloat(s.costPerTablet||(tps>0?cost/tps:0))
+      };
+    });
+}
+
+/* ---- Search: name/brand starting-with matches first, then anywhere-contains ---- */
+function searchMeds(query){
+  var list=buildMedList();
+  if(!query) return list.slice(0,40);
+  var q=query.trim().toLowerCase();
+  if(!q) return list.slice(0,40);
+  var starts=[], contains=[];
+  list.forEach(function(m){
+    var nameL=m.name.toLowerCase(), brandL=m.brand.toLowerCase();
+    if(nameL.indexOf(q)===0||brandL.indexOf(q)===0){
+      starts.push(m);
+    } else if((nameL+' '+brandL+' '+m.medType.toLowerCase()).indexOf(q)>-1){
+      contains.push(m);
+    }
+  });
+  return starts.concat(contains).slice(0,40);
+}
+
+function renderMedResults(row, query){
+  var resultsEl=row.querySelector('.med-search-results');
+  var matches=searchMeds(query);
+  if(!matches.length){
+    resultsEl.innerHTML='<div class="med-result-empty">No matching stock found.</div>';
+  } else {
+    resultsEl.innerHTML=matches.map(function(m){
+      var outOfStock=m.qty<=0;
+      var mrpTxt=m.mrp>0?'MRP:Rs.'+m.mrp.toFixed(2):'';
+      var subTxt=m.tps>0?(' | '+m.tps+'/'+m.qtyType.replace(/s$/,'')):'';
+      var metaTxt=outOfStock
+        ? '<span style="color:var(--danger);font-weight:700;">Out of Stock</span>'
+        : fmtQty(m.qty)+' '+esc(m.qtyType)+(mrpTxt?' | '+mrpTxt:'')+subTxt;
+      return '<div class="med-result-item'+(outOfStock?' med-result-out':'')+'" data-id="'+m.id+'" data-outofstock="'+outOfStock+'" onmousedown="selectMedResult(this)">'+
+        '<div class="med-result-name" style="'+(outOfStock?'color:var(--danger);':'')+'">'+esc(m.name)+
+          (m.brand?' <span class="med-result-brand">('+esc(m.brand)+')</span>':'')+'</div>'+
+        '<div class="med-result-meta">'+metaTxt+'</div>'+
+      '</div>';
     }).join('');
+  }
+  resultsEl.classList.add('open');
+  resultsEl.style.display='block';
+}
+
+function onMedSearchInput(input){
+  var row=input.closest('.bill-item-row');
+  row.querySelector('.med-id-input').value='';
+  row.querySelector('.sell-as-select').style.display='none';
+  renderMedResults(row, input.value);
+  updateTotals();
+}
+function onMedSearchFocus(input){
+  renderMedResults(input.closest('.bill-item-row'), input.value);
+}
+function onMedSearchBlur(input){
+  var row=input.closest('.bill-item-row');
+  setTimeout(function(){
+    var el=row.querySelector('.med-search-results');
+    el.classList.remove('open'); el.style.display='none';
+  }, 150);
+}
+function selectMedResult(el){
+  var id=el.getAttribute('data-id');
+  var row=el.closest('.bill-item-row');
+  var m=buildMedList().find(function(x){return x.id===id;});
+  if(!m) return;
+  if(m.qty<=0){
+    RP.toast(m.name+' is out of stock — add stock first before selling it.','error');
+    return;
+  }
+  var input=row.querySelector('.med-search-input');
+  input.value=m.name+(m.brand?' ('+m.brand+')':'');
+  row.querySelector('.med-id-input').value=m.id;
+  var resultsEl=row.querySelector('.med-search-results');
+  resultsEl.classList.remove('open'); resultsEl.style.display='none';
+  onMedSelect(row);
 }
 
 /* ---- Add a medicine row ---- */
 function addBillRow(){
-  var opts=getMedOptions();
-  if(!opts){ RP.toast('No stock available. Add stock first.','warn'); return; }
+  if(!buildMedList().some(function(m){return m.qty>0;})){ RP.toast('No stock available. Add stock first.','warn'); return; }
   var id='br_'+RP.uid();
   billRowIds.push(id);
   var div=document.createElement('div');
   div.className='bill-item-row';
   div.id=id;
   div.innerHTML=
-    '<div class="field med-sel-wrap" style="min-width:0;">'+
-      '<select onchange="onMedSelect(this)" style="font-size:.85rem;padding:9px 10px;">'+
-        '<option value="">-- Select Medicine --</option>'+opts+
+    '<div class="field med-sel-wrap" style="min-width:0;position:relative;">'+
+      '<input type="text" class="med-search-input" placeholder="Search medicine by name or brand..."'+
+        ' autocomplete="off" oninput="onMedSearchInput(this)" onfocus="onMedSearchFocus(this)" onblur="onMedSearchBlur(this)"'+
+        ' style="font-size:.85rem;padding:9px 10px;"/>'+
+      '<input type="hidden" class="med-id-input" value=""/>'+
+      '<div class="med-search-results"></div>'+
+      '<select class="sell-as-select" onchange="onSellAsChange(this)">'+
+        '<option value="strip">Sell as whole unit</option>'+
+        '<option value="tablet">Sell as sub-unit</option>'+
       '</select>'+
     '</div>'+
     '<div class="field" style="min-width:0;">'+
@@ -330,25 +431,67 @@ function addBillRow(){
         ' oninput="updateTotals()" style="font-size:.85rem;padding:9px 10px;"/>'+
     '</div>'+
     '<button class="remove-btn" onclick="removeRow(\''+id+'\')" title="Remove">&#10005;</button>';
+  div.dataset.sellAs='strip';
   document.getElementById('bill-items-area').appendChild(div);
   updateTotals();
 }
 
-/* ---- When medicine is selected — auto-fill MRP ---- */
-function onMedSelect(sel){
-  var opt=sel.selectedOptions[0];
-  if(!opt||!opt.value) return;
+/* ---- When medicine is selected — show/hide "Sell As" and auto-fill price ---- */
+function onMedSelect(row){
+  var idInput=row.querySelector('.med-id-input');
+  var sellAsSel=row.querySelector('.sell-as-select');
+  var id=idInput.value;
+  if(!id){
+    sellAsSel.style.display='none';
+    return;
+  }
+  var m=buildMedList().find(function(x){return x.id===id;});
+  if(!m){ sellAsSel.style.display='none'; return; }
+  if(m.tps>0){
+    sellAsSel.innerHTML=
+      '<option value="strip">Sell as whole '+m.qtyType.replace(/s$/,'')+'</option>'+
+      '<option value="tablet">Sell as individual units</option>';
+    sellAsSel.style.display='block';
+    sellAsSel.value='strip';
+  } else {
+    sellAsSel.style.display='none';
+  }
+  applySellUnit(row);
+}
+
+/* ---- When "Sell As" (whole unit / individual unit) changes ---- */
+function onSellAsChange(sel){
   var row=sel.closest('.bill-item-row');
+  applySellUnit(row);
+}
+
+/* ---- Apply the chosen selling unit: sets max qty + auto-fills unit price ---- */
+function applySellUnit(row){
+  var idInput=row.querySelector('.med-id-input');
+  var id=idInput.value;
+  if(!id) return;
+  var m=buildMedList().find(function(x){return x.id===id;});
+  if(!m) return;
+  var sellAsSel=row.querySelector('.sell-as-select');
+  var sellAs=(sellAsSel&&sellAsSel.style.display!=='none')?sellAsSel.value:'strip';
   var inputs=row.querySelectorAll('input[type="number"]');
   var qtyInput=inputs[0];
   var priceInput=inputs[1];
-  var availQty=parseInt(opt.getAttribute('data-qty'))||0;
-  var mrp=parseFloat(opt.getAttribute('data-mrp'))||0;
-  // Enforce max
-  qtyInput.max=availQty;
-  qtyInput.title='Max: '+availQty+' '+opt.getAttribute('data-qtytype');
-  // Auto-fill MRP as unit price
-  if(mrp>0) priceInput.value=mrp.toFixed(2);
+
+  if(sellAs==='tablet'&&m.tps>0){
+    var availTablets=Math.floor(m.qty*m.tps);
+    qtyInput.max=availTablets;
+    qtyInput.title='Max: '+availTablets+' individual units';
+    priceInput.value=(m.mrpTablet>0?m.mrpTablet:(m.tps>0?m.mrp/m.tps:0)).toFixed(2);
+  } else {
+    // Selling as a WHOLE pack — can only sell whole units even if a
+    // fractional amount remains from earlier loose-unit sales.
+    var availWhole=Math.floor(m.qty);
+    qtyInput.max=availWhole;
+    qtyInput.title='Max: '+availWhole+' '+m.qtyType;
+    priceInput.value=m.mrp>0?m.mrp.toFixed(2):'';
+  }
+  row.dataset.sellAs=sellAs;
   updateTotals();
 }
 
@@ -369,17 +512,21 @@ function removeRow(id){
 /* ---- Calculate totals AND profit preview ---- */
 function updateTotals(){
   var total=0, profit=0, count=0;
+  var medMap={}; buildMedList().forEach(function(m){ medMap[m.id]=m; });
   document.querySelectorAll('.bill-item-row').forEach(function(row){
-    var sel=row.querySelector('select');
+    var idInput=row.querySelector('.med-id-input');
+    var id=idInput?idInput.value:'';
     var inputs=row.querySelectorAll('input[type="number"]');
     var qty=parseFloat(inputs[0]?inputs[0].value:0)||0;
     var price=parseFloat(inputs[1]?inputs[1].value:0)||0;
-    if(sel&&sel.value&&qty>0){
+    if(id&&medMap[id]&&qty>0){
       count++;
       var lineTotal=qty*price;
       total+=lineTotal;
-      // Profit = (selling price - cost price) * qty
-      var costPerUnit=parseFloat(sel.selectedOptions[0]?sel.selectedOptions[0].getAttribute('data-cost'):0)||0;
+      // Profit = (selling price - cost price) * qty — cost basis depends on Sell As (strip/tablet)
+      var m=medMap[id];
+      var sellAs=row.dataset.sellAs||'strip';
+      var costPerUnit=(sellAs==='tablet'&&m.tps>0)?m.costTablet:m.cost;
       profit+=(price-costPerUnit)*qty;
     }
   });
@@ -394,23 +541,37 @@ function updateTotals(){
 /* ---- Get all bill items ---- */
 function getBillItems(){
   var items=[];
+  var medMap={}; buildMedList().forEach(function(m){ medMap[m.id]=m; });
   document.querySelectorAll('.bill-item-row').forEach(function(row){
-    var sel=row.querySelector('select');
+    var idInput=row.querySelector('.med-id-input');
+    var id=idInput?idInput.value:'';
     var inputs=row.querySelectorAll('input[type="number"]');
     var qty=parseFloat(inputs[0]?inputs[0].value:0)||0;
     var price=parseFloat(inputs[1]?inputs[1].value:0)||0;
-    if(!sel||!sel.value||qty<=0) return;
-    var opt=sel.selectedOptions[0];
-    var costPerUnit=parseFloat(opt?opt.getAttribute('data-cost'):0)||0;
+    if(!id||!medMap[id]||qty<=0) return;
+    var m=medMap[id];
+    var sellAs=row.dataset.sellAs||'strip';
+    var costPerUnit, unitLabel, stockDeduct;
+    if(sellAs==='tablet'&&m.tps>0){
+      costPerUnit=m.costTablet;
+      unitLabel='Units';
+      stockDeduct=qty/m.tps;               // fraction of a pack (strip/bottle/vial/box...)
+    } else {
+      costPerUnit=m.cost;
+      unitLabel=m.qtyType;
+      stockDeduct=qty;
+    }
     items.push({
-      medId:    sel.value,
+      medId:    id,
       qty:      qty,
+      soldAs:   sellAs,
+      stockDeduct: stockDeduct,          // amount to subtract from stock (in stock's native qtyType units)
       cost:     price,      // selling price (MRP based) used for bill total
       subtotal: parseFloat((qty*price).toFixed(2)),
-      medName:  opt?opt.getAttribute('data-name'):'',
-      medBrand: opt?opt.getAttribute('data-brand'):'',
-      medType:  opt?opt.getAttribute('data-type'):'',
-      qtyType:  opt?opt.getAttribute('data-qtytype'):'',
+      medName:  m.name,
+      medBrand: m.brand,
+      medType:  m.medType,
+      qtyType:  unitLabel,
       // Cost price (for profit only — not shown on bill)
       costPricePerUnit: costPerUnit,
       profitOnLine: parseFloat(((price-costPerUnit)*qty).toFixed(2))
@@ -420,7 +581,7 @@ function getBillItems(){
 }
 
 /* ---- Submit bill ---- */
-function submitBill(){
+async function submitBill(){
   var name   = document.getElementById('b-name').value.trim();
   var phone  = document.getElementById('b-phone').value.trim();
   var email  = document.getElementById('b-email').value.trim();
@@ -437,85 +598,117 @@ function submitBill(){
     RP.toast('Enter price for all medicines.','error'); return;
   }
 
-  var total      = parseFloat(items.reduce(function(s,i){return s+i.subtotal;},0).toFixed(2));
-  var totalProfit= parseFloat(items.reduce(function(s,i){return s+i.profitOnLine;},0).toFixed(2));
-  var billNo     = 'RP-'+new Date().getFullYear()+'-'+String(RP.getBills().length+1).padStart(4,'0');
-
-  var bill={
-    id:          RP.uid(),
-    billNo:      billNo,
-    patientName: name,
-    patientPhone:phone,
-    patientEmail:email,
-    age:         age,
-    date:        date,
-    doctor:      doctor,
-    items:       items,
-    total:       total,
-    totalProfit: totalProfit,
-    createdOn:   new Date().toISOString()
-  };
-
-  // ── 1. Save bill ──
-  var bills=RP.getBills();
-  bills.push(bill);
-  RP.saveBills(bills);
-
-  // ── 2. Deduct stock ──
-  var stock=RP.getStock();
-  items.forEach(function(item){
-    var idx=stock.findIndex(function(s){return s.id===item.medId;});
-    if(idx!==-1){
-      stock[idx].quantity=Math.max(0,(parseInt(stock[idx].quantity)||0)-item.qty);
-    }
-  });
-  RP.saveStock(stock);
-
-  // ── 3. Record EACH item as a sale entry in RP_SALES for profit tracking ──
-  if(typeof RP_SALES !== 'undefined'){
-    items.forEach(function(item){
-      var saleEntry={
-        id:                RP.uid(),
-        stockId:           item.medId,
-        medicineName:      item.medName,
-        qtyType:           item.qtyType,
-        qtySold:           item.qty,
-        costPricePerUnit:  item.costPricePerUnit,
-        mrpPerUnit:        item.cost,        // the price charged on bill
-        sellingPricePerUnit:item.cost,
-        discountPct:       0,
-        totalCost:         parseFloat((item.costPricePerUnit*item.qty).toFixed(2)),
-        totalSelling:      item.subtotal,
-        profit:            item.profitOnLine,
-        date:              date||localDateStr(),
-        createdOn:         new Date().toISOString(),
-        source:            'billing'         // distinguishes from direct stock sale
-      };
-      RP_SALES.add(saleEntry, true); // billing already deducted stock above
-    });
+  // Guard against double-clicking Generate Bill, which would otherwise fire
+  // this whole function twice and create duplicate bill/sale records.
+  var submitBtn=document.getElementById('bill-submit-btn');
+  if(submitBtn){
+    if(submitBtn.disabled) return; // already submitting
+    submitBtn.disabled=true;
+    submitBtn.textContent='Saving...';
   }
 
-  // ── 4. Sync to Google Sheets ──
-  RP.postToSheet({action:'addBill', data:bill});
+  try {
+    var total      = parseFloat(items.reduce(function(s,i){return s+i.subtotal;},0).toFixed(2));
+    var totalProfit= parseFloat(items.reduce(function(s,i){return s+i.profitOnLine;},0).toFixed(2));
+    var billNo     = 'RP-'+new Date().getFullYear()+'-'+String(RP.getBills().length+1).padStart(4,'0');
 
-  // ── 5. Build print bill ──
-  currentBillData=bill;
-  buildPrintBill(bill);
+    var bill={
+      id:          RP.uid(),
+      billNo:      billNo,
+      patientName: name,
+      patientPhone:phone,
+      patientEmail:email,
+      age:         age,
+      date:        date,
+      doctor:      doctor,
+      items:       items,
+      total:       total,
+      totalProfit: totalProfit,
+      createdOn:   new Date().toISOString()
+    };
 
-  var profitLine='<br><span style="font-size:.8rem;color:'+(totalProfit>=0?'var(--success)':'var(--danger)')+';">'+
-    'Profit on this bill: '+(totalProfit>=0?'+':'')+'Rs.'+totalProfit.toFixed(2)+'</span>';
-  var emailLine=email?'<br><span style="font-size:.78rem;color:var(--muted)">Sending bill to: '+email+'</span>':'';
+    // ── 1. Save bill ──
+    var bills=RP.getBills();
+    bills.push(bill);
+    RP.saveBills(bills);
 
-  document.getElementById('success-msg').innerHTML=
-    'Bill <strong>'+billNo+'</strong> for <strong>'+name+'</strong><br>'+
-    'Phone: '+phone+'<br>'+
-    'Total: <strong style="color:var(--accent)">Rs. '+total.toFixed(2)+'</strong>'+
-    profitLine+emailLine;
+    // ── 2. Deduct stock (handles fractional strip deduction when sold as loose tablets) ──
+    var stock=RP.getStock();
+    items.forEach(function(item){
+      var idx=stock.findIndex(function(s){return s.id===item.medId;});
+      if(idx!==-1){
+        var deduct=(item.stockDeduct!==undefined)?item.stockDeduct:item.qty;
+        stock[idx].quantity=Math.max(0,parseFloat(((parseFloat(stock[idx].quantity)||0)-deduct).toFixed(3)));
+      }
+    });
+    RP.saveStock(stock);
 
-  document.getElementById('success-modal').classList.add('open');
-  renderRecentBills();
-  updateBadge();
-  RP.toast('Bill saved. Stock reduced. Profit recorded.','success');
+    // ── 3. Record EACH item as a sale entry in RP_SALES for profit tracking ──
+    // Awaited ONE AT A TIME — this guarantees every write (including the
+    // built-in retry on failure) is fully sent before the next one starts,
+    // instead of firing a burst of unawaited requests that can race each
+    // other or get silently dropped (the exact bug that caused sales to
+    // "move profit" locally without ever reaching the Sheet).
+    if(typeof RP_SALES !== 'undefined'){
+      for (var i=0; i<items.length; i++){
+        var item=items[i];
+        var saleEntry={
+          id:                RP.uid(),
+          stockId:           item.medId,
+          medicineName:      item.medName,
+          qtyType:           item.qtyType,
+          qtySold:           item.qty,
+          soldAs:            item.soldAs || 'strip',
+          costPricePerUnit:  item.costPricePerUnit,
+          mrpPerUnit:        item.cost,        // the price charged on bill
+          sellingPricePerUnit:item.cost,
+          discountPct:       0,
+          totalCost:         parseFloat((item.costPricePerUnit*item.qty).toFixed(2)),
+          totalSelling:      item.subtotal,
+          profit:            item.profitOnLine,
+          date:              date||localDateStr(),
+          createdOn:         new Date().toISOString(),
+          source:            'billing'         // distinguishes from direct stock sale
+        };
+        await RP_SALES.add(saleEntry, true); // billing already deducted stock above
+      }
+    }
+
+    // ── 4. Sync each changed stock item to Google Sheets ──
+    var stockIds=items.map(function(item){return item.medId;})
+      .filter(function(id,idx,arr){return arr.indexOf(id)===idx;}); // unique
+    for (var j=0; j<stockIds.length; j++){
+      var sIdx=stock.findIndex(function(x){return x.id===stockIds[j];});
+      if(sIdx!==-1) await RP.postToSheet({action:'updateStock', data:stock[sIdx]});
+    }
+
+    // ── 5. Sync the bill itself ──
+    await RP.postToSheet({action:'addBill', data:bill});
+
+    // ── 6. Build print bill ──
+    currentBillData=bill;
+    buildPrintBill(bill);
+
+    var profitLine='<br><span style="font-size:.8rem;color:'+(totalProfit>=0?'var(--success)':'var(--danger)')+';">'+
+      'Profit on this bill: '+(totalProfit>=0?'+':'')+'Rs.'+totalProfit.toFixed(2)+'</span>';
+    var emailLine=email?'<br><span style="font-size:.78rem;color:var(--muted)">Sending bill to: '+email+'</span>':'';
+
+    document.getElementById('success-msg').innerHTML=
+      'Bill <strong>'+billNo+'</strong> for <strong>'+name+'</strong><br>'+
+      'Phone: '+phone+'<br>'+
+      'Total: <strong style="color:var(--accent)">Rs. '+total.toFixed(2)+'</strong>'+
+      profitLine+emailLine;
+
+    document.getElementById('success-modal').classList.add('open');
+    renderRecentBills();
+    updateBadge();
+    RP.toast('Bill saved. Stock reduced. Profit recorded.','success');
+  } finally {
+    if(submitBtn){
+      submitBtn.disabled=false;
+      submitBtn.textContent='Generate Bill';
+    }
+  }
 }
 
 function closeSuccess(){
@@ -560,7 +753,7 @@ function buildPrintBill(bill){
     '<div class="bill-doc-hdr">'+
       '<div class="bill-doc-hdr-row">'+
         '<div>'+
-          '<div class="bill-doc-name">RUKMINI PHARMACY</div>'+
+          '<div class="bill-doc-name">POOJA PHARMACY</div>'+
           '<div class="bill-doc-sub">Authorised Pharmaceutical Retailer</div>'+
           '<div class="bill-doc-sub" style="margin-top:3px;">Email: saivenkatachala@gmail.com</div>'+
         '</div>'+
@@ -583,7 +776,7 @@ function buildPrintBill(bill){
       '</div>'+
       '<div class="bill-doc-info-box">'+
         '<div class="bill-doc-lbl">Pharmacy Details</div>'+
-        '<div class="bill-doc-val">Rukmini Pharmacy</div>'+
+        '<div class="bill-doc-val">Pooja Pharmacy</div>'+
         '<div class="bill-doc-detail">'+
           (bill.doctor?'Prescribed by: Dr. '+esc(bill.doctor)+'<br>':'')+
           'Ref No: '+esc(bill.billNo)+'<br>'+
@@ -611,9 +804,9 @@ function buildPrintBill(bill){
         '<div class="bill-doc-sig-box">Patient Signature</div>'+
         '<div class="bill-doc-sig-box">Pharmacist Signature</div>'+
       '</div>'+
-      '<div class="bill-doc-note">Computer generated bill. Thank you for choosing Rukmini Pharmacy.</div>'+
+      '<div class="bill-doc-note">Computer generated bill. Thank you for choosing Pooja Pharmacy.</div>'+
     '</div>'+
-    '<div class="bill-doc-bottom">Rukmini Pharmacy &nbsp;|&nbsp; saivenkatachala@gmail.com</div>'+
+    '<div class="bill-doc-bottom">Pooja Pharmacy &nbsp;|&nbsp; saivenkatachala@gmail.com</div>'+
   '</div>';
 
   document.getElementById('print-bill').innerHTML=html;
@@ -667,6 +860,15 @@ function reprintBill(id){
 
 function esc(s){
   return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Format a stock quantity for display: whole numbers show clean ("50"),
+// fractional quantities (from loose-unit sales) show up to 2 decimal
+// places ("4.7") instead of raw floating-point noise.
+function fmtQty(q){
+  var n=parseFloat(q)||0;
+  var rounded=Math.round(n*100)/100;
+  return String(rounded);
 }
 
 // Init

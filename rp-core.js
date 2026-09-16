@@ -1,21 +1,7 @@
-// ============================================================
-// Rukmini Pharmacy — Core Data Engine v3.0
-// PRIMARY DATABASE : Google Sheets (shared across all devices)
-// LOCAL CACHE      : localStorage (speeds up page loads)
-// ============================================================
-//
-// HOW IT WORKS:
-//   WRITE  → always goes to Google Sheets first, then updates local cache
-//   READ   → fetches from Google Sheets on every page load, stores in cache
-//   CACHE  → used only while the Sheet fetch is in-flight (instant display)
-//
-// This means ALL devices always see the SAME data.
-// ============================================================
-
 const RP = {
 
   // ---- IMPORTANT: Replace with your deployed Apps Script URL ----
-      SHEET_URL: 'https://script.google.com/macros/s/AKfycbyKCRKblnliejpWlluC3yHrk0p2ZcEbz1n2Ke9rugy_MIideYJADZLGOBA85Xsw3ghd/exec',
+      SHEET_URL: 'https://script.google.com/macros/s/AKfycbyO7n5JLeIDgx3ipmEd68cRfnW338r7dLMP4WkN3536P1DRN1d5GDLOsDUoC3ZPwTWp8A/exec',
 
   OWNER_EMAIL: 'saivenkatachala@gmail.com',
 
@@ -169,20 +155,37 @@ const RP = {
   // WRITE TO GOOGLE SHEETS  — fire-and-forget GET
   // Also updates local cache immediately so UI feels instant.
   // ============================================================
-  async postToSheet(payload){
+  // Sends one write to the Google Sheet backend. Uses no-cors GET to avoid
+  // CORS preflight — but that also means the response is opaque, so we
+  // can NEVER confirm the Apps Script side actually succeeded, only that
+  // the network request itself didn't fail outright. To reduce the chance
+  // of a silently dropped write (which showed up as extra charges / sales
+  // "moving profit" locally but never appearing in the Sheet), this now:
+  //   1. Is awaitable — callers that `await` it know the request (plus
+  //      one retry) has at least been dispatched before moving on, instead
+  //      of firing many of these in an uncoordinated burst.
+  //   2. Retries once on a transport-level failure (e.g. a dropped
+  //      connection), with a short delay.
+  async postToSheet(payload, retriesLeft){
+    if(retriesLeft === undefined) retriesLeft = 1;
     if(!this.isSheetConfigured()){
       console.info('[RP] Sheet not configured — saved locally only.');
-      return;
+      return { ok:false, reason:'not-configured' };
     }
     try {
       const encoded = encodeURIComponent(JSON.stringify(payload));
       const url = this.SHEET_URL + '?data=' + encoded;
-      // Use no-cors GET — bypasses preflight, request reaches Google
-      fetch(url, { method: 'GET', mode: 'no-cors' })
-        .then(() => console.info('[RP] Sheet write sent:', payload.action))
-        .catch(err => console.warn('[RP] Sheet write error:', err.message));
+      await fetch(url, { method: 'GET', mode: 'no-cors' });
+      console.info('[RP] Sheet write sent:', payload.action);
+      return { ok:true };
     } catch(e) {
-      console.warn('[RP] postToSheet failed:', e.message);
+      console.warn('[RP] Sheet write error:', e.message, '— action:', payload.action);
+      if(retriesLeft > 0){
+        await new Promise(r => setTimeout(r, 800));
+        return this.postToSheet(payload, retriesLeft - 1);
+      }
+      console.error('[RP] Sheet write FAILED after retry — action:', payload.action, payload);
+      return { ok:false, reason:e.message };
     }
   },
 
@@ -401,10 +404,17 @@ const RP_SALES = {
 
   getAll(){ return this._get(); },
 
-  // skipStockDeduct=true when caller (billing.html) already deducted stock
-  add(sale, skipStockDeduct){
+  // skipStockDeduct=true when caller (billing.html / stock-sale.html) already deducted stock.
+  // async + awaits its Sheet write (with retry) so callers can `await RP_SALES.add(...)`
+  // and know the write was at least fully dispatched before moving on to the next one —
+  // this is what prevents a burst of un-awaited writes (e.g. several extra charges in one
+  // sale) from racing ahead of each other or getting silently dropped.
+  async add(sale, skipStockDeduct){
     sale.id        = sale.id || RP.uid();
     sale.createdOn = sale.createdOn || new Date().toISOString();
+    // Tell the backend too — otherwise its own fallback deduction runs a
+    // SECOND time on top of the frontend's manual deduction (double-deduct bug).
+    sale.skipStockDeduct = !!skipStockDeduct;
     // Always ensure .date is a clean YYYY-MM-DD local date string
     // If caller passed it from the date input, keep it — it's already correct
     // If missing, generate from local device time (not UTC)
@@ -416,27 +426,99 @@ const RP_SALES = {
     const sales = this._get();
     sales.push(sale);
     this._set(sales);
-    // Only deduct stock if caller hasn't already done it
+    // Only deduct stock locally if caller hasn't already done it
     if(!skipStockDeduct){
       const stock = RP.getStock();
       const idx = stock.findIndex(s => s.id === sale.stockId);
       if(idx !== -1){
-        stock[idx].quantity = Math.max(0, (parseInt(stock[idx].quantity)||0) - (parseInt(sale.qtySold)||0));
+        // tps-aware + fractional (matches update()/delete() below) — a plain
+        // parseInt(qtySold) here would wrongly treat a loose-tablet sale's
+        // quantity as whole strips.
+        const tps = parseFloat(stock[idx].tabletsPerStrip) || 0;
+        const qty = parseFloat(sale.qtySold) || 0;
+        const deduct = (sale.soldAs === 'tablet' && tps > 0) ? qty / tps : qty;
+        const current = parseFloat(stock[idx].quantity) || 0;
+        stock[idx].quantity = Math.max(0, parseFloat((current - deduct).toFixed(3)));
       }
       RP.saveStock(stock);
     }
-    RP.postToSheet({ action: 'addSale', data: sale });
+    await RP.postToSheet({ action: 'addSale', data: sale });
     return sale;
   },
 
-  // Profit = (sellingPrice - costPrice) * qty
-  // costPrice here = cost per unit as entered in add-stock
+  // Fetch a single sale by id (used by the edit modal)
+  getById(id){
+    return this._get().find(s => s.id === id) || null;
+  },
+
+  // Update an existing sale record. `updates` is a partial object merged
+  // onto the existing sale. Handles reconciling the stock quantity that
+  // was previously deducted for this sale against the new qty/soldAs —
+  // i.e. adds back the old deduction and applies the new one.
+  async update(id, updates){
+    const sales = this._get();
+    const idx = sales.findIndex(s => s.id === id);
+    if(idx === -1) return null;
+    const oldSale = sales[idx];
+
+    // ---- Reconcile stock quantity (old deduction reversed, new one applied) ----
+    const stock = RP.getStock();
+    const sIdx = stock.findIndex(x => x.id === oldSale.stockId);
+    if(sIdx !== -1){
+      const tps = parseFloat(stock[sIdx].tabletsPerStrip) || 0;
+      const oldQty  = parseFloat(oldSale.qtySold) || 0;
+      const newQty  = parseFloat(updates.qtySold != null ? updates.qtySold : oldSale.qtySold) || 0;
+      const soldAs  = updates.soldAs || oldSale.soldAs || 'strip';
+      const oldDeduct = (oldSale.soldAs === 'tablet' && tps > 0) ? oldQty / tps : oldQty;
+      const newDeduct = (soldAs === 'tablet' && tps > 0) ? newQty / tps : newQty;
+      const delta = newDeduct - oldDeduct; // positive = need to deduct more; negative = give back
+      const current = parseFloat(stock[sIdx].quantity) || 0;
+      stock[sIdx].quantity = Math.max(0, parseFloat((current - delta).toFixed(3)));
+      RP.saveStock(stock);
+      await RP.postToSheet({ action: 'updateStock', data: stock[sIdx] });
+    }
+
+    const updatedSale = Object.assign({}, oldSale, updates, { id: oldSale.id });
+    sales[idx] = updatedSale;
+    this._set(sales);
+    await RP.postToSheet({ action: 'updateSale', data: updatedSale });
+    return updatedSale;
+  },
+
+  // Delete a sale record and give back the stock quantity it had deducted.
+  async delete(id){
+    const sales = this._get();
+    const idx = sales.findIndex(s => s.id === id);
+    if(idx === -1) return false;
+    const sale = sales[idx];
+
+    const stock = RP.getStock();
+    const sIdx = stock.findIndex(x => x.id === sale.stockId);
+    if(sIdx !== -1){
+      const tps = parseFloat(stock[sIdx].tabletsPerStrip) || 0;
+      const qty = parseFloat(sale.qtySold) || 0;
+      const deduct = (sale.soldAs === 'tablet' && tps > 0) ? qty / tps : qty;
+      const current = parseFloat(stock[sIdx].quantity) || 0;
+      stock[sIdx].quantity = parseFloat((current + deduct).toFixed(3));
+      RP.saveStock(stock);
+      await RP.postToSheet({ action: 'updateStock', data: stock[sIdx] });
+    }
+
+    sales.splice(idx, 1);
+    this._set(sales);
+    await RP.postToSheet({ action: 'deleteSale', id: id });
+    return true;
+  },
+
+  // Profit = sum of each sale's stored .profit field.
+  // IMPORTANT: never recompute this from sellingPricePerUnit/costPricePerUnit/
+  // qtySold — those are rounded per-unit figures, and multiplying them back
+  // out doesn't perfectly reconstruct the original discount-adjusted total
+  // (item discount % + group/batch discount share). The .profit field is
+  // already the correct, precise value computed once at sale time (or
+  // recalculated correctly on edit) — trust it directly.
   getProfit(sales){
-    return (sales||this._get()).reduce((sum, s) => {
-      const profit = ((parseFloat(s.sellingPricePerUnit)||0) - (parseFloat(s.costPricePerUnit)||0))
-                     * (parseInt(s.qtySold)||0);
-      return sum + profit;
-    }, 0);
+    return (sales||this._get()).reduce((sum, s) => sum + (parseFloat(s.profit)||0), 0);
   },
 
   // Today's sales
