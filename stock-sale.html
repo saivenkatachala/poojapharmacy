@@ -846,6 +846,11 @@ async function submitSale(){
     RP.toast('Add at least one medicine or an extra charge.','error'); return;
   }
 
+  // ADDED VALIDATION CHECK: Prevent blank/0 price entry 
+  if(calc.lineItems.some(function(li){ return li.price <= 0; })){
+    RP.toast('Please enter a valid price for all medicines.','error'); return;
+  }
+
   // Guard against double-clicking Record Sale, which would otherwise fire
   // this whole function twice and create duplicate sale rows.
   var submitBtn=document.getElementById('sale-submit-btn');
@@ -868,7 +873,17 @@ async function submitSale(){
       deductions[li.m.id]=(deductions[li.m.id]||0)+stockDeduct;
     });
 
-    // Write each medicine sale ONE AT A TIME, awaiting each — this is what
+    // 1. DEDUCT STOCK LOCALLY FIRST (Prevents race conditions / dropped connections)
+    var stock=RP.getStock();
+    Object.keys(deductions).forEach(function(stockId){
+      var idx=stock.findIndex(function(x){return x.id===stockId;});
+      if(idx!==-1){
+        stock[idx].quantity=Math.max(0, parseFloat(((parseFloat(stock[idx].quantity)||0)-deductions[stockId]).toFixed(3)));
+      }
+    });
+    RP.saveStock(stock);
+
+    // 2. Write each medicine sale ONE AT A TIME, awaiting each — this is what
     // guarantees every write (including the built-in retry on failure) is
     // fully sent before the next one starts, instead of firing a burst of
     // unawaited requests that can race each other or get silently dropped.
@@ -897,11 +912,11 @@ async function submitSale(){
         date: date,
         createdOn: new Date().toISOString()
       };
-      // We deduct stock ourselves (aggregated, below) — skip RP_SALES' own deduction
+      // We deducted stock locally ourselves above — skip RP_SALES' internal local deduction
       await RP_SALES.add(sale, true);
     }
 
-    // Extra charges — no stock, no cost, 100% profit. Recorded as their own
+    // 3. Extra charges — no stock, no cost, 100% profit. Recorded as their own
     // sale rows (soldAs:'extra') sharing the same groupId so History groups
     // them together with the medicines from this same sale. Awaited one at a
     // time for the same reason as medicines above.
@@ -930,16 +945,8 @@ async function submitSale(){
       await RP_SALES.add(exSale, true); // no stock to deduct — skip deduction entirely
     }
 
-    // Apply aggregated deductions once per medicine, then sync each changed
-    // item — awaited sequentially for the same reason as the sales above.
-    var stock=RP.getStock();
-    Object.keys(deductions).forEach(function(stockId){
-      var idx=stock.findIndex(function(x){return x.id===stockId;});
-      if(idx!==-1){
-        stock[idx].quantity=Math.max(0, parseFloat(((parseFloat(stock[idx].quantity)||0)-deductions[stockId]).toFixed(3)));
-      }
-    });
-    RP.saveStock(stock);
+    // 4. Sync each changed item to Google Sheets — awaited sequentially for the same reason 
+    // as the sales above.
     var stockIds=Object.keys(deductions);
     for (var k=0; k<stockIds.length; k++){
       var idx2=stock.findIndex(function(x){return x.id===stockIds[k];});
@@ -1281,6 +1288,9 @@ async function saveSaleEdit(){
   var date=document.getElementById('se-date').value||s.date;
 
   if(!isExtra && qty<=0){ RP.toast('Quantity must be greater than 0.','error'); return; }
+  
+  // ADDED VALIDATION CHECKS
+  if(!isExtra && price<=0){ RP.toast('Price must be greater than 0.','error'); return; }
   if(isExtra && price<=0){ RP.toast('Amount must be greater than 0.','error'); return; }
 
   if(!isExtra){
