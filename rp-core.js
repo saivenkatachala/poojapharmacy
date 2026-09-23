@@ -119,11 +119,11 @@ const RP = {
     return new Promise((resolve, reject) => {
       const cbName = '_rp_cb_' + Date.now();
       const timeout = setTimeout(() => {
-        delete window[cbName];
+        window[cbName] = function() {};
         const script = document.getElementById(cbName);
         if(script) script.remove();
         reject(new Error('JSONP timeout'));
-      }, 15000);
+      }, 50000);
 
       window[cbName] = (data) => {
         clearTimeout(timeout);
