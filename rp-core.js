@@ -13,7 +13,7 @@ const RP = {
 
   QTY_TYPES: ['Strips','Bottles','Boxes','Vials','Sachets','Tubes','Packets','Others'],
 
-  LOW_STOCK: 5,
+  LOW_STOCK: 1,
   EXPIRY_WARN_MONTHS: 3,
 
   // ============================================================

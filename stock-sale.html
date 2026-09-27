@@ -1186,35 +1186,86 @@ function renderSalesTable(){
     return;
   }
 
-  wrap.innerHTML='<table>'+
-    '<thead><tr>'+
-      '<th>Date</th><th>Medicine</th><th>Qty</th><th>Unit</th>'+
-      '<th>Price/Unit</th><th>Discount</th><th>Total</th><th>Profit</th><th>Batch</th><th></th>'+
-    '</tr></thead>'+
-    '<tbody>'+sales.map(function(s){
-      var profitColor=s.profit>=0?'var(--success)':'var(--danger)';
-      var discTxt=(parseFloat(s.discountPct)||0).toFixed(1)+'%';
-      var isExtra=s.soldAs==='extra';
-      var badges=[];
-      if(isExtra) badges.push('<span class="badge" style="font-size:.68rem;background:rgba(168,85,247,.12);color:#a855f7;">Extra</span>');
-      if(s.groupId) badges.push('<span class="badge badge-info" style="font-size:.68rem;">Batch</span>');
-      return '<tr>'+
-        '<td>'+RP.fmtDate(s.date)+'</td>'+
-        '<td><strong>'+esc(s.medicineName)+'</strong></td>'+
-        '<td class="mono">'+s.qtySold+'</td>'+
-        '<td>'+esc(s.qtyType)+'</td>'+
-        '<td class="mono">Rs.'+parseFloat(s.sellingPricePerUnit).toFixed(2)+'</td>'+
-        '<td class="mono">'+discTxt+'</td>'+
-        '<td class="mono">Rs.'+parseFloat(s.totalSelling).toFixed(2)+'</td>'+
-        '<td class="mono" style="color:'+profitColor+';font-weight:600;">'+(s.profit>=0?'+':'')+'Rs.'+parseFloat(s.profit).toFixed(2)+'</td>'+
-        '<td>'+(badges.length?badges.join(' '):'—')+'</td>'+
-        '<td style="white-space:nowrap;">'+
-          '<button class="btn btn-sm btn-secondary" onclick="openSaleEdit(\''+s.id+'\')">Edit</button> '+
-          '<button class="btn btn-sm btn-danger" onclick="openSaleDelModal(\''+s.id+'\')">Del</button>'+
-        '</td>'+
-      '</tr>';
-    }).join('')+
-    '</tbody></table>';
+  // Group consecutive sales sharing the same groupId into one batch block —
+  // mirrors the grouping already used in renderHistory(), so a batch sale
+  // shows as one grouped block here too instead of as unrelated-looking rows.
+  var groups=[]; var byGid={};
+  sales.forEach(function(s){
+    var gid=s.groupId || ('single_'+s.id);
+    if(!byGid[gid]){
+      byGid[gid]={ items:[], profit:0, totalSelling:0, date:s.date };
+      groups.push(byGid[gid]);
+    }
+    byGid[gid].items.push(s);
+    byGid[gid].profit+=parseFloat(s.profit)||0;
+    byGid[gid].totalSelling+=parseFloat(s.totalSelling)||0;
+  });
+
+  // ---- Colour shades used across this view ----
+  // Standalone individual sale : plain surface card, neutral border.
+  // Batch container            : soft teal-tinted box (matches the app's accent).
+  // Items nested inside batch  : slightly lighter surface, sitting "inside" the teal box.
+  var SHADE_SINGLE      = 'var(--surface2)';
+  var SHADE_BATCH_BOX   = 'rgba(13,148,136,.07)';
+  var SHADE_BATCH_BORDER= 'rgba(13,148,136,.28)';
+  var SHADE_BATCH_ITEM  = 'var(--surface)';
+
+  function saleCard(s, nested){
+    var profitColor=s.profit>=0?'var(--success)':'var(--danger)';
+    var discTxt=(parseFloat(s.discountPct)||0).toFixed(1)+'%';
+    var isExtra=s.soldAs==='extra';
+    var badges=[];
+    if(isExtra) badges.push('<span class="badge" style="font-size:.68rem;background:rgba(168,85,247,.12);color:#a855f7;">Extra</span>');
+    var qtyLine=isExtra
+      ? 'Extra charge'
+      : s.qtySold+' '+esc(s.qtyType)+' @ Rs.'+parseFloat(s.sellingPricePerUnit).toFixed(2)+
+        (parseFloat(s.discountPct)?' | Disc: '+discTxt:'');
+    return '<div style="background:'+(nested?SHADE_BATCH_ITEM:SHADE_SINGLE)+';border:1px solid var(--border);'+
+      'border-radius:10px;padding:'+(nested?'10px 12px':'12px 14px')+';margin-bottom:'+(nested?'8px':'10px')+
+      (nested?';margin-left:16px;':'')+
+      ';display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">'+
+      '<div style="min-width:0;flex:1;">'+
+        '<div style="font-weight:600;font-size:.86rem;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'+
+          esc(s.medicineName)+badges.join(' ')+
+        '</div>'+
+        '<div style="font-size:.74rem;color:var(--muted);margin-top:3px;">'+qtyLine+' | '+RP.fmtDate(s.date)+'</div>'+
+      '</div>'+
+      '<div style="text-align:right;flex-shrink:0;">'+
+        '<div style="font-weight:700;font-family:monospace;font-size:.85rem;">Rs.'+parseFloat(s.totalSelling).toFixed(2)+'</div>'+
+        '<div style="font-size:.74rem;font-weight:600;color:'+profitColor+';">'+
+          (s.profit>=0?'+':'')+'Rs.'+parseFloat(s.profit).toFixed(2)+' profit'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;gap:6px;flex-shrink:0;">'+
+        '<button class="btn btn-sm btn-secondary" onclick="openSaleEdit(\''+s.id+'\')">Edit</button>'+
+        '<button class="btn btn-sm btn-danger" onclick="openSaleDelModal(\''+s.id+'\')">Del</button>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function batchBox(g){
+    var headerColor=g.profit>=0?'var(--success)':'var(--danger)';
+    return '<div style="background:'+SHADE_BATCH_BOX+';border:1px solid '+SHADE_BATCH_BORDER+';'+
+      'border-radius:12px;padding:14px 16px 6px;margin-bottom:12px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">'+
+        '<span style="font-size:.74rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">'+
+          '&#128230; Batch Sale — '+g.items.length+' items | '+RP.fmtDate(g.date)+
+        '</span>'+
+        '<span style="font-size:.82rem;">'+
+          'Total: <strong>Rs.'+g.totalSelling.toFixed(2)+'</strong> &nbsp;|&nbsp; '+
+          '<strong style="color:'+headerColor+';">'+(g.profit>=0?'+':'')+'Rs.'+g.profit.toFixed(2)+' profit</strong>'+
+        '</span>'+
+      '</div>'+
+      g.items.map(function(s){ return saleCard(s, true); }).join('')+
+    '</div>';
+  }
+
+  var bodyHtml=groups.map(function(g){
+    if(g.items.length===1) return saleCard(g.items[0], false);
+    return batchBox(g);
+  }).join('');
+
+  wrap.innerHTML='<div>'+bodyHtml+'</div>';
 }
 
 /* ---- Edit ---- */
