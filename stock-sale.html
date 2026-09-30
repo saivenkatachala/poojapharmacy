@@ -244,6 +244,21 @@
   </div>
 </div>
 
+<!-- BILL DELETE MODAL -->
+<div class="modal-overlay" id="bill-del-modal">
+  <div class="modal" style="max-width:380px;text-align:center;">
+    <div style="font-size:40px;margin-bottom:12px;">&#128465;</div>
+    <h3>Delete this bill?</h3>
+    <p style="color:var(--muted);margin:12px 0 24px;">
+      Only the saved bill is removed. Your sales records and stock are not changed. This cannot be undone.
+    </p>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-secondary" onclick="closeBillDelModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmBillDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
 <!-- BILL PREVIEW MODAL -->
 <div class="modal-overlay" id="bill-preview-modal">
   <div class="modal" style="max-width:760px;padding:20px;">
@@ -1182,6 +1197,7 @@ async function submitSale(){
     // guarantees every write (including the built-in retry on failure) is
     // fully sent before the next one starts, instead of firing a burst of
     // unawaited requests that can race each other or get silently dropped.
+    var savedRows=[]; // the Sales rows written for this sale — the bill is built from these
     for (var i=0; i<calc.lineItems.length; i++){
       var li=calc.lineItems[i];
       var unitLabel=(li.sellAs==='tablet'&&li.m.tps>0)?'Units':li.m.qtyType;
@@ -1209,6 +1225,7 @@ async function submitSale(){
       };
       // We deducted stock locally ourselves above — skip RP_SALES' internal local deduction
       await RP_SALES.add(sale, true);
+      savedRows.push(sale);
     }
 
     // 3. Extra charges — no stock, no cost, 100% profit. Recorded as their own
@@ -1238,6 +1255,7 @@ async function submitSale(){
         createdOn: new Date().toISOString()
       };
       await RP_SALES.add(exSale, true); // no stock to deduct — skip deduction entirely
+      savedRows.push(exSale);
     }
 
     // 4. Sync each changed item to Google Sheets — awaited sequentially for the same reason 
@@ -1259,12 +1277,11 @@ async function submitSale(){
       '<span style="color:'+(calc.grandProfit>=0?'var(--success)':'var(--danger)')+';">'+
       'Profit: '+(calc.grandProfit>=0?'+':'')+'Rs.'+calc.grandProfit.toFixed(2)+'</span>';
     // Snapshot this sale as a bill, so the "Save Bill" button can save it (individual or group)
-    var billItems=calc.lineItems.map(function(li){
-      return { name:li.m.name, qtyType:(li.sellAs==='tablet'&&li.m.tps>0)?'Units':li.m.qtyType,
-               qty:li.qty, mrp:li.price, total:parseFloat(li.finalAmount.toFixed(2)) };
-    }).concat(calc.extras.map(function(ex){
-      return { name:ex.description, qtyType:'Extra', qty:1, mrp:ex.amount, total:parseFloat(ex.amount.toFixed(2)) };
-    }));
+    // Bill lines come straight from the Sales rows: MRPPerUnit, SellingPricePerUnit, TotalSelling
+    var billItems=savedRows.map(function(r){
+      return { name:r.medicineName, qtyType:r.qtyType, qty:r.qtySold,
+               mrp:r.mrpPerUnit, sell:r.sellingPricePerUnit, total:r.totalSelling };
+    });
     pendingBill={
       groupId:groupId,
       customerName:(document.getElementById('s-customer').value||'').trim(),
@@ -2559,14 +2576,35 @@ var RP_BILL_INFO={
   licences:['RLF20AP2026006150','RLF21AP2026006133'],
   mobiles:['8143811695','8332915695'],
   name:'POOJA PHARMACY',
+  logo:'billlogo.png',
   address:'11-1/5-10, Ground Floor, Yogimallavaram, Tiruchanoor'
 };
+
+/* Load the local logo once; the PDF needs it as image data */
+var RP_BILL_LOGO_DATA=null;
+(function(){
+  var im=new Image();
+  im.onload=function(){
+    try{
+      var c=document.createElement('canvas');
+      c.width=im.naturalWidth; c.height=im.naturalHeight;
+      c.getContext('2d').drawImage(im,0,0);
+      RP_BILL_LOGO_DATA=c.toDataURL('image/png');
+    }catch(e){ console.warn('Logo could not be read for PDF:',e); }
+  };
+  im.src=RP_BILL_INFO.logo;
+})();
 
 function billDmy(d){
   var s=String(d||'').slice(0,10), p=s.split('-');
   return p.length===3 ? p[2]+'/'+p[1]+'/'+p[0] : s;
 }
 function billMoney(v){ return (parseFloat(v)||0).toFixed(2); }
+function billSell(it){
+  if(it.sell!=null && it.sell!=='') return parseFloat(it.sell)||0;
+  var q=parseFloat(it.qty)||0;
+  return q>0 ? (parseFloat(it.total)||0)/q : (parseFloat(it.total)||0);
+}
 function billQtyText(it){
   var q=String(Math.round((parseFloat(it.qty)||0)*100)/100);
   var t=(it.qtyType && it.qtyType!=='Extra') ? String(it.qtyType) : '';
@@ -2628,7 +2666,7 @@ function renderBillsTable(){
   wrap.innerHTML='<div>'+bills.map(function(b){
     var items=(b.items||[]).map(function(it,i){
       return '<div style="display:flex;justify-content:space-between;gap:12px;font-size:.8rem;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'+
-        '<span style="min-width:0;">'+(i+1)+'. '+esc(it.name)+' <span style="color:var(--muted);">&times; '+esc(billQtyText(it))+'</span></span>'+
+        '<span style="min-width:0;">'+(i+1)+'. '+esc(it.name)+' <span style="color:var(--muted);">&times; '+esc(billQtyText(it))+' | MRP '+billMoney(it.mrp)+' | Sell '+billMoney(billSell(it))+'</span></span>'+
         '<span style="font-family:monospace;flex-shrink:0;">Rs.'+billMoney(it.total)+'</span></div>';
     }).join('');
     return '<div style="background:rgba(13,148,136,.07);border:1px solid rgba(13,148,136,.28);border-radius:12px;padding:14px 16px 8px;margin-bottom:12px;">'+
@@ -2641,10 +2679,37 @@ function renderBillsTable(){
         '<div style="display:flex;gap:6px;">'+
           '<button class="btn btn-sm btn-secondary" onclick="previewBill(\''+b.id+'\')">Preview Bill</button>'+
           '<button class="btn btn-sm btn-primary" onclick="downloadBill(\''+b.id+'\')">Download</button>'+
+          '<button class="btn btn-sm btn-danger" onclick="openBillDelModal(\''+b.id+'\')">Delete</button>'+
         '</div>'+
       '</div>'+items+
     '</div>';
   }).join('')+'</div>';
+}
+
+/* ---- Delete a saved bill (sales + stock are untouched) ---- */
+var billDeleteId=null;
+function openBillDelModal(id){
+  billDeleteId=id;
+  document.getElementById('bill-del-modal').classList.add('open');
+}
+function closeBillDelModal(){
+  document.getElementById('bill-del-modal').classList.remove('open');
+  billDeleteId=null;
+}
+async function confirmBillDelete(){
+  if(!billDeleteId) return;
+  var id=billDeleteId;
+  closeBillDelModal(); // close first so a double-click can't delete twice
+  try{
+    await RP_BILLS.delete(id);
+    if(previewBillId===id) closeBillPreview();
+    renderBillsTable();
+    RP.toast('Bill deleted.','warn');
+  }catch(err){
+    console.error('confirmBillDelete failed:',err);
+    renderBillsTable();
+    RP.toast('Could not delete the bill: '+(err&&err.message?err.message:err),'error');
+  }
 }
 
 /* ---- Bill preview (HTML) — professional layout, mirrors the PDF ---- */
@@ -2658,13 +2723,15 @@ function rpBillHtml(b){
       '<td style="'+td+'text-align:center;color:#6b7280;">'+(i+1)+'</td>'+
       '<td style="'+td+'font-weight:600;">'+esc(it.name)+'</td>'+
       '<td style="'+td+'text-align:center;white-space:nowrap;">'+esc(billQtyText(it))+'</td>'+
-      '<td style="'+td+'text-align:right;">'+billMoney(it.mrp)+'</td>'+
+      '<td style="'+td+'text-align:right;color:#6b7280;">'+billMoney(it.mrp)+'</td>'+
+      '<td style="'+td+'text-align:right;">'+billMoney(billSell(it))+'</td>'+
       '<td style="'+td+'text-align:right;font-weight:700;">'+billMoney(it.total)+'</td></tr>';
   }).join('');
   var lbl='font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#6b7280;font-weight:700;';
-  return '<div style="background:#fff;color:#1f2937;font-family:Arial,Helvetica,sans-serif;border:2px solid '+T+';border-radius:8px;overflow:hidden;min-width:560px;">'+
+  return '<div style="background:#fff;color:#1f2937;font-family:Arial,Helvetica,sans-serif;border:2px solid '+T+';border-radius:8px;overflow:hidden;min-width:620px;">'+
     /* header band */
-    '<div style="background:linear-gradient(135deg,'+D+','+T+');color:#fff;padding:14px 22px 18px;">'+
+    '<div style="position:relative;background:linear-gradient(135deg,'+D+','+T+');color:#fff;padding:14px 22px 18px;">'+
+      '<div style="position:absolute;left:22px;bottom:16px;width:68px;height:68px;background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.25);"><img src="'+I.logo+'" alt="Logo" style="width:58px;height:auto;display:block;"></div>'+
       '<div style="display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:1.6;color:#d5f3ee;">'+
         '<div>'+I.licences.map(function(l){ return 'Lic. No: '+l; }).join('<br>')+'</div>'+
         '<div style="text-align:right;">'+I.mobiles.map(function(m){ return 'Mobile: '+m; }).join('<br>')+'</div>'+
@@ -2687,12 +2754,13 @@ function rpBillHtml(b){
           '<th style="'+th+'width:52px;">SI.NO</th>'+
           '<th style="'+th+'text-align:left;">Name of the Medicine</th>'+
           '<th style="'+th+'width:96px;">Qty</th>'+
-          '<th style="'+th+'width:84px;text-align:right;">MRP</th>'+
-          '<th style="'+th+'width:96px;text-align:right;">Total</th>'+
+          '<th style="'+th+'width:80px;text-align:right;">MRP</th>'+
+          '<th style="'+th+'width:96px;text-align:right;">Selling Price</th>'+
+          '<th style="'+th+'width:92px;text-align:right;">Total</th>'+
         '</tr></thead>'+
         '<tbody>'+rows+'</tbody>'+
         '<tfoot><tr>'+
-          '<td colspan="4" style="padding:11px 10px;text-align:right;font-weight:700;letter-spacing:1.5px;font-size:12.5px;background:'+D+';color:#fff;border:1px solid '+D+';">GRAND TOTAL</td>'+
+          '<td colspan="5" style="padding:11px 10px;text-align:right;font-weight:700;letter-spacing:1.5px;font-size:12.5px;background:'+D+';color:#fff;border:1px solid '+D+';">GRAND TOTAL</td>'+
           '<td style="padding:11px 8px;text-align:right;font-weight:700;font-size:16px;background:'+D+';color:#fbbf24;border:1px solid '+D+';">Rs. '+billMoney(b.grandTotal)+'</td>'+
         '</tr></tfoot>'+
       '</table>'+
@@ -2700,7 +2768,7 @@ function rpBillHtml(b){
     /* footer */
     '<div style="display:flex;align-items:center;margin:18px 22px 0;padding:14px 0 18px;border-top:1px solid #cfe3df;">'+
       '<span style="flex:1;"></span>'+
-      '<span style="flex:2;text-align:center;font-style:italic;font-weight:700;color:'+T+';font-size:14px;">Thank You Visit Again</span>'+
+      '<span style="flex:2;text-align:center;font-style:italic;font-weight:700;color:'+T+';font-size:14px;">Thank You Visit Again🙏🏻</span>'+
       '<span style="flex:1;text-align:right;font-family:Georgia,\'Times New Roman\',serif;font-weight:700;font-size:14px;color:'+D+';letter-spacing:1px;">'+I.name+'</span>'+
     '</div>'+
   '</div>';
@@ -2751,6 +2819,10 @@ function rpBuildBillPdf(JsPDF, b){
   doc.setTextColor(213,243,238); doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
   doc.text(I.address, W/2, 47.5, {align:'center'});
 
+  // Logo (left side of header, below licence numbers)
+  doc.setFillColor(255,255,255); doc.roundedRect(M+2,24.5,26,26,3,3,'F');
+  try{ doc.addImage(I.logo,'PNG',M+2+1.6,24.5+1.4,22.8,23.7); }catch(e){ console.warn('Logo not added to PDF:',e); }
+
   // ---- Customer / date info box ----
   doc.setFillColor(SOFT[0],SOFT[1],SOFT[2]); doc.setDrawColor(153,214,207); doc.setLineWidth(0.3);
   doc.roundedRect(M,62,W-2*M,15,2,2,'FD');
@@ -2763,32 +2835,33 @@ function rpBuildBillPdf(JsPDF, b){
 
   // ---- Items table ----
   var body=(b.items||[]).map(function(it,i){
-    return [String(i+1), String(it.name||''), billQtyText(it), billMoney(it.mrp), billMoney(it.total)];
+    return [String(i+1), String(it.name||''), billQtyText(it), billMoney(it.mrp), billMoney(billSell(it)), billMoney(it.total)];
   });
   doc.autoTable({
     startY:83, margin:{top:16,bottom:22,left:M,right:M},
-    head:[['SI.NO','Name of the Medicine','Qty','MRP','Total']],
+    head:[['SI.NO','Name of the Medicine','Qty','MRP','Selling Price','Total']],
     body:body,
-    foot:[[{content:'GRAND TOTAL',colSpan:4,styles:{halign:'right'}}, 'Rs. '+billMoney(b.grandTotal)]],
+    foot:[[{content:'GRAND TOTAL',colSpan:5,styles:{halign:'right'}}, 'Rs. '+billMoney(b.grandTotal)]],
     showFoot:'lastPage',
     theme:'grid',
     styles:{font:'helvetica',fontSize:10.5,textColor:[31,41,55],lineColor:LINE,lineWidth:0.25,cellPadding:{top:3,bottom:3,left:2.6,right:2.6}},
-    headStyles:{fillColor:TEAL,textColor:255,fontStyle:'bold',fontSize:9.5,lineColor:TEAL},
+    headStyles:{fillColor:TEAL,textColor:255,fontStyle:'bold',fontSize:9,lineColor:TEAL},
     alternateRowStyles:{fillColor:ZEBRA},
     footStyles:{fillColor:DARK,textColor:255,fontStyle:'bold',fontSize:11,lineColor:DARK},
     columnStyles:{
-      0:{cellWidth:16,halign:'center',textColor:[107,114,128]},
+      0:{cellWidth:14,halign:'center',textColor:[107,114,128]},
       1:{cellWidth:'auto',halign:'left',fontStyle:'bold'},
-      2:{cellWidth:30,halign:'center'},
-      3:{cellWidth:26,halign:'right'},
-      4:{cellWidth:32,halign:'right',fontStyle:'bold'}
+      2:{cellWidth:24,halign:'center'},
+      3:{cellWidth:22,halign:'right',textColor:[107,114,128]},
+      4:{cellWidth:27,halign:'right'},
+      5:{cellWidth:27,halign:'right',fontStyle:'bold'}
     },
     // columnStyles only reach the body, so align header / grand-total cells here
     didParseCell:function(d){
-      if(d.section==='head') d.cell.styles.halign=['center','left','center','right','right'][d.column.index];
+      if(d.section==='head') d.cell.styles.halign=['center','left','center','right','right','right'][d.column.index];
       if(d.section==='foot'){
         d.cell.styles.halign='right';
-        if(d.column.index===4){ d.cell.styles.textColor=[251,191,36]; d.cell.styles.fontSize=12.5; }
+        if(d.column.index===5){ d.cell.styles.textColor=[251,191,36]; d.cell.styles.fontSize=12.5; }
       }
     },
     didDrawPage:function(){ frame(); }

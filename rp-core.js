@@ -1,7 +1,7 @@
 const RP = {
 
   // ---- IMPORTANT: Replace with your deployed Apps Script URL ----
-      SHEET_URL: 'https://script.google.com/macros/s/AKfycbyCRVRce7diJ_faxrj8o-AWCI7efJPRaW2mTEv5wL1eyGpvshUeC-qpCCd4aJda96Ms/exec',
+      SHEET_URL: 'https://script.google.com/macros/s/AKfycbzf7bW9ZtKQBiS-78ShzBTx8OQKndbaXWOnNgva2cbJmPrUmEd8O_1ajnQx6nqDQrECMA/exec',
 
   OWNER_EMAIL: 'saivenkatachala@gmail.com',
 
@@ -595,5 +595,12 @@ const RP_BILLS = {
     this._set(bills);
     await RP.postToSheet({ action: 'addSaleBill', data: bill });
     return bill;
+  },
+
+  // Removes only the saved bill (local cache + 'SaleBills' sheet rows).
+  // Sales rows and stock are never touched.
+  async delete(id){
+    this._set(this._get().filter(b => b.id !== id));
+    await RP.postToSheet({ action: 'deleteSaleBill', id: id });
   }
 };
