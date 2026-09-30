@@ -6,8 +6,18 @@
 <title>Stock Sale — Pooja Pharmacy</title>
 <link rel="icon" href="pp.png">
 <link rel="stylesheet" href="rp-styles.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script>
+  // Fallback: if the cdnjs copy of Chart.js failed to load (blocked network,
+  // ad-blocker, offline), try a second CDN before giving up.
+  if(typeof Chart==='undefined'){
+    document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"><\/script>');
+  }
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <style>
-  .tab-switcher{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;max-width:420px;}
+  .tab-switcher{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;max-width:760px;}
   .tab-btn{
     flex:1;padding:11px 16px;background:var(--surface2);border:none;cursor:pointer;
     font-family:'DM Sans',sans-serif;font-weight:600;font-size:.88rem;color:var(--muted);
@@ -136,6 +146,68 @@
   .profit-card .pc-sub{font-size:.78rem;color:var(--muted);}
 
   .filter-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+
+  /* ---- Sales Analysis tab ---- */
+  .an-cat-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+  .an-cat-chip{
+    padding:9px 18px;border-radius:20px;border:1px solid var(--border);
+    background:var(--surface2);color:var(--text2,var(--muted));cursor:pointer;
+    font-size:.85rem;font-weight:600;font-family:'DM Sans',sans-serif;transition:.2s;
+  }
+  .an-cat-chip:hover{border-color:var(--accent);color:var(--accent);}
+  .an-cat-chip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+  .an-subcontrol{display:none;gap:10px;flex-wrap:wrap;align-items:center;}
+  .an-subcontrol.active{display:flex;}
+  .an-input{
+    background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:.85rem;
+  }
+  .an-nav-btn{
+    width:34px;height:34px;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface2);color:var(--text);cursor:pointer;font-size:.9rem;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .an-nav-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .an-range-label{font-size:.8rem;color:var(--muted);font-weight:600;}
+
+  .an-stat-grid{
+    display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:18px 0;
+  }
+  @media(max-width:1080px){.an-stat-grid{grid-template-columns:repeat(3,1fr);}}
+  @media(max-width:640px){.an-stat-grid{grid-template-columns:repeat(2,1fr);}}
+  .an-stat-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:14px 16px;display:flex;flex-direction:column;gap:4px;
+  }
+  .an-stat-card .as-label{font-size:.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+  .an-stat-card .as-val{font-family:'Playfair Display',serif;font-size:1.35rem;font-weight:700;}
+  .an-stat-card .as-sub{font-size:.7rem;color:var(--muted);}
+
+  .an-charts-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-top:4px;}
+  @media(max-width:960px){.an-charts-grid{grid-template-columns:1fr;}}
+  .chart-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:18px 20px;
+  }
+  .chart-card-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+  .chart-card-title{font-weight:700;font-size:.92rem;}
+  .chart-toggle-row{display:flex;gap:6px;flex-wrap:wrap;}
+  .chart-toggle-btn{
+    padding:5px 12px;border-radius:14px;border:1px solid var(--border);
+    background:var(--surface2);color:var(--muted);cursor:pointer;
+    font-size:.72rem;font-weight:700;font-family:'DM Sans',sans-serif;
+  }
+  .chart-toggle-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .chart-canvas-wrap{position:relative;height:300px;}
+  .chart-canvas-wrap.chart-tall{height:340px;}
+  .chart-empty-overlay{
+    position:absolute;inset:0;display:none;flex-direction:column;
+    align-items:center;justify-content:center;gap:6px;color:var(--muted);text-align:center;
+  }
+  .chart-empty-overlay.show{display:flex;}
+  .chart-empty-overlay .ceo-icon{font-size:30px;}
+  .chart-full-row{grid-column:1/-1;}
 </style>
 </head>
 <body>
@@ -167,6 +239,22 @@
     <div class="popup-msg" id="sale-success-msg"></div>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
       <button class="btn btn-primary" onclick="closeSaleSuccess()">OK</button>
+      <button class="btn btn-secondary" id="sale-save-bill-btn" onclick="saveBillFromSale()">Save Bill</button>
+    </div>
+  </div>
+</div>
+
+<!-- BILL PREVIEW MODAL -->
+<div class="modal-overlay" id="bill-preview-modal">
+  <div class="modal" style="max-width:760px;padding:20px;">
+    <div class="modal-header" style="margin-bottom:12px;">
+      <h3>Bill Preview</h3>
+      <span class="modal-close" onclick="closeBillPreview()">&#10005;</span>
+    </div>
+    <div style="max-height:68vh;overflow:auto;" id="bill-preview-body"></div>
+    <div class="flex-end" style="margin-top:14px;">
+      <button class="btn btn-secondary" onclick="closeBillPreview()">Close</button>
+      <button class="btn btn-primary" onclick="downloadBill()">Download PDF</button>
     </div>
   </div>
 </div>
@@ -189,7 +277,7 @@
         </div>
         <div class="field">
           <label>Selling Price / Unit (Rs.)</label>
-          <input type="number" id="se-price" min="0" step="0.01" oninput="recalcSaleEdit()"/>
+          <input type="number" id="se-price" min="0" step="any" oninput="recalcSaleEdit()"/>
         </div>
         <div class="field">
           <label>Sale Date</label>
@@ -199,7 +287,7 @@
           <label>Cost Price / Unit (Rs.)
             <span class="hint">usually leave as recorded</span>
           </label>
-          <input type="number" id="se-cost" min="0" step="0.01" oninput="recalcSaleEdit()"/>
+          <input type="number" id="se-cost" min="0" step="any" oninput="recalcSaleEdit()"/>
         </div>
       </div>
 
@@ -248,6 +336,8 @@
   <div class="tab-switcher">
     <button class="tab-btn active" onclick="switchSaleTab('record')">Record Sale</button>
     <button class="tab-btn" onclick="switchSaleTab('view')">View &amp; Edit Sales</button>
+    <button class="tab-btn" onclick="switchSaleTab('bills')">Bills</button>
+    <button class="tab-btn" onclick="switchSaleTab('analysis')">Sales Analysis</button>
   </div>
 
   <div class="tab-panel active" id="tab-record">
@@ -300,9 +390,15 @@
           </div>
 
           <!-- Date -->
-          <div class="field" style="margin-top:16px;max-width:220px;">
-            <label>Sale Date</label>
-            <input type="date" id="s-date" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:9px 12px;font-family:'DM Sans',sans-serif;font-size:.9rem;"/>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:16px;">
+            <div class="field" style="width:220px;max-width:100%;">
+              <label>Sale Date</label>
+              <input type="date" id="s-date" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:9px 12px;font-family:'DM Sans',sans-serif;font-size:.9rem;"/>
+            </div>
+            <div class="field" style="flex:1;min-width:200px;">
+              <label>Customer Name <span class="hint">(optional — shown on the bill)</span></label>
+              <input type="text" id="s-customer" maxlength="80" placeholder="e.g. Ramesh Kumar" autocomplete="off"/>
+            </div>
           </div>
 
           <!-- Price breakdown -->
@@ -411,6 +507,181 @@
     </div>
   </div><!-- /tab-view -->
 
+  <div class="tab-panel" id="tab-bills">
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap;gap:12px;padding-bottom:16px;">
+        <div class="toolbar" style="margin:0;flex:1;min-width:0;">
+          <div class="search-box">
+            <span class="search-icon">&#128269;</span>
+            <input type="text" id="bill-search-input" placeholder="Search customer or medicine..." oninput="renderBillsTable()"/>
+          </div>
+        </div>
+        <input type="date" id="bill-filter-from" onchange="renderBillsTable()"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+          color:var(--text);padding:8px 10px;font-family:'DM Sans',sans-serif;font-size:.83rem;" title="From date"/>
+        <input type="date" id="bill-filter-to" onchange="renderBillsTable()"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+          color:var(--text);padding:8px 10px;font-family:'DM Sans',sans-serif;font-size:.83rem;" title="To date"/>
+        <button class="btn btn-sm btn-secondary" onclick="clearBillFilters()">Clear</button>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap" id="bills-table-wrap"></div>
+      </div>
+    </div>
+  </div><!-- /tab-bills -->
+
+  <div class="tab-panel" id="tab-analysis">
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header" style="flex-wrap:wrap;gap:10px;">
+        <span class="card-title">Choose Period</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-secondary" onclick="downloadAnalysisCSV()">&#11015;&#65039; Download CSV</button>
+          <button class="btn btn-sm btn-primary" onclick="downloadAnalysisReport()">&#128196; Download Report</button>
+        </div>
+      </div>
+      <div class="card-body">
+
+        <div class="an-cat-row">
+          <button class="an-cat-chip" data-cat="daily" onclick="switchAnCategory('daily',this)">Daily</button>
+          <button class="an-cat-chip active" data-cat="weekly" onclick="switchAnCategory('weekly',this)">Weekly</button>
+          <button class="an-cat-chip" data-cat="monthly" onclick="switchAnCategory('monthly',this)">Monthly</button>
+          <button class="an-cat-chip" data-cat="compare" onclick="switchAnCategory('compare',this)">Month to Month</button>
+          <button class="an-cat-chip" data-cat="yearly" onclick="switchAnCategory('yearly',this)">Yearly</button>
+        </div>
+
+        <!-- Daily controls -->
+        <div class="an-subcontrol" id="an-sub-daily">
+          <button class="an-nav-btn" onclick="shiftAnDay(-1)" title="Previous day">&#8249;</button>
+          <input type="date" id="an-day-date" class="an-input" onchange="renderAnalysis()"/>
+          <button class="an-nav-btn" onclick="shiftAnDay(1)" title="Next day">&#8250;</button>
+          <span class="an-range-label">Shows every sale made that day, in order.</span>
+        </div>
+
+        <!-- Weekly controls -->
+        <div class="an-subcontrol active" id="an-sub-weekly">
+          <button class="an-nav-btn" onclick="shiftAnWeek(-1)" title="Previous week">&#8249;</button>
+          <input type="date" id="an-week-date" class="an-input" onchange="renderAnalysis()"/>
+          <button class="an-nav-btn" onclick="shiftAnWeek(1)" title="Next week">&#8250;</button>
+          <span class="an-range-label" id="an-week-range"></span>
+        </div>
+
+        <!-- Monthly controls -->
+        <div class="an-subcontrol" id="an-sub-monthly">
+          <button class="an-nav-btn" onclick="shiftAnMonth(-1)" title="Previous month">&#8249;</button>
+          <input type="month" id="an-month" class="an-input" onchange="renderAnalysis()"/>
+          <button class="an-nav-btn" onclick="shiftAnMonth(1)" title="Next month">&#8250;</button>
+        </div>
+
+        <!-- Compare (month-to-month) controls -->
+        <div class="an-subcontrol" id="an-sub-compare">
+          <span class="an-range-label">From</span>
+          <input type="month" id="an-cmp-from" class="an-input" onchange="renderAnalysis()"/>
+          <span class="an-range-label">To</span>
+          <input type="month" id="an-cmp-to" class="an-input" onchange="renderAnalysis()"/>
+          <span class="an-range-label" id="an-cmp-hint">Compares each month in this range side by side.</span>
+        </div>
+
+        <!-- Yearly controls -->
+        <div class="an-subcontrol" id="an-sub-yearly">
+          <span class="an-range-label">Year</span>
+          <select id="an-year" class="an-input" onchange="renderAnalysis()"></select>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Summary stats for selected period -->
+    <div class="an-stat-grid" id="an-stat-grid"></div>
+
+    <div class="an-charts-grid">
+
+      <!-- Total Selling / Cost / Profit trend -->
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Total Selling, Cost &amp; Profit Trend</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+          <div class="chart-toggle-row" id="an-trend-field-row">
+            <span class="an-range-label" style="margin-right:2px;">Show:</span>
+            <button class="chart-toggle-btn active" data-val="all" onclick="setAnTrendField('all',this)">All</button>
+            <button class="chart-toggle-btn" data-val="sell" onclick="setAnTrendField('sell',this)">Total Selling</button>
+            <button class="chart-toggle-btn" data-val="cost" onclick="setAnTrendField('cost',this)">Total Cost</button>
+            <button class="chart-toggle-btn" data-val="profit" onclick="setAnTrendField('profit',this)">Profit</button>
+          </div>
+          <div class="chart-toggle-row" id="an-trend-type-row">
+            <button class="chart-toggle-btn active" data-val="bar" onclick="setAnTrendType('bar',this)">Bar</button>
+            <button class="chart-toggle-btn" data-val="line" onclick="setAnTrendType('line',this)">Line</button>
+            <button class="chart-toggle-btn" data-val="area" onclick="setAnTrendType('area',this)">Area</button>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap chart-tall">
+          <canvas id="an-trend-chart"></canvas>
+          <div class="chart-empty-overlay" id="an-trend-empty"><div class="ceo-icon">&#128200;</div><p>No sales in this period.</p></div>
+        </div>
+      </div>
+
+      <!-- Sales by medicine type -->
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Sales by Medicine Type</span>
+        </div>
+        <div class="chart-canvas-wrap chart-tall">
+          <canvas id="an-type-chart"></canvas>
+          <div class="chart-empty-overlay" id="an-type-empty"><div class="ceo-icon">&#129514;</div><p>No sales in this period.</p></div>
+        </div>
+      </div>
+
+      <!-- Top selling medicines -->
+      <div class="chart-card chart-full-row">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Top Selling Medicines</span>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+            <div class="chart-toggle-row">
+              <span class="an-range-label" style="margin-right:2px;">Rank by:</span>
+              <button class="chart-toggle-btn active" data-val="revenue" onclick="setAnTopMetric('revenue',this)">Total Selling</button>
+              <button class="chart-toggle-btn" data-val="profit" onclick="setAnTopMetric('profit',this)">Profit</button>
+              <button class="chart-toggle-btn" data-val="qty" onclick="setAnTopMetric('qty',this)">Quantity</button>
+            </div>
+            <div class="chart-toggle-row" id="an-top-type-row">
+              <button class="chart-toggle-btn active" data-val="bar" onclick="setAnTopType('bar',this)">Bar</button>
+              <button class="chart-toggle-btn" data-val="pie" onclick="setAnTopType('pie',this)">Pie</button>
+              <button class="chart-toggle-btn" data-val="doughnut" onclick="setAnTopType('doughnut',this)">Doughnut</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap" style="height:360px;">
+          <canvas id="an-top-chart"></canvas>
+          <div class="chart-empty-overlay" id="an-top-empty"><div class="ceo-icon">&#128137;</div><p>No sales in this period.</p></div>
+        </div>
+      </div>
+
+      <!-- Total Selling vs Profit -->
+      <div class="chart-card chart-full-row">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Total Selling vs Profit</span>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+            <div class="chart-toggle-row" id="an-sp-view-row">
+              <button class="chart-toggle-btn active" data-val="period" onclick="setAnSellProfitView('period',this)">By Period</button>
+              <button class="chart-toggle-btn" data-val="medicine" onclick="setAnSellProfitView('medicine',this)">By Medicine</button>
+            </div>
+            <div class="chart-toggle-row" id="an-sp-type-row">
+              <button class="chart-toggle-btn active" data-val="bar" onclick="setAnSellProfitType('bar',this)">Bar</button>
+              <button class="chart-toggle-btn" data-val="line" onclick="setAnSellProfitType('line',this)">Line</button>
+            </div>
+          </div>
+        </div>
+        <p style="margin:-4px 0 12px;font-size:.78rem;color:var(--muted);">Out of everything sold (Total Selling), this shows how much actually became Profit — so you can see your real margin at a glance.</p>
+        <div class="chart-canvas-wrap" style="height:360px;">
+          <canvas id="an-sp-chart"></canvas>
+          <div class="chart-empty-overlay" id="an-sp-empty"><div class="ceo-icon">&#128176;</div><p>No sales in this period.</p></div>
+        </div>
+      </div>
+
+    </div>
+
+  </div><!-- /tab-analysis -->
+
 </div>
 </div>
 
@@ -434,6 +705,7 @@ function toggleTheme(){
   var t=RP.getTheme()==='dark'?'light':'dark';
   RP.setTheme(t);
   document.getElementById('theme-btn').innerHTML=t==='dark'?'&#127769;':'&#9728;';
+  if(document.getElementById('tab-analysis').classList.contains('active')) renderAnalysis();
 }
 document.getElementById('theme-btn').innerHTML=RP.getTheme()==='dark'?'&#127769;':'&#9728;';
 
@@ -446,19 +718,25 @@ function updateBadge(){
 updateBadge();
 
 function esc(s){
-  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // Format a stock quantity for display: whole numbers show clean ("50"),
 // fractional quantities (from loose-unit sales) show up to 2 decimal
 // places ("4.7") instead of raw floating-point noise.
+function csvCell(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; }
 function fmtQty(q){
   var n=parseFloat(q)||0;
   var rounded=Math.round(n*100)/100;
   return String(rounded);
 }
 
-window._rpOnSyncComplete=function(){ renderProfitSummary(); renderHistory(); renderSalesTable(); };
+window._rpOnSyncComplete=function(){
+  renderProfitSummary(); renderHistory(); renderSalesTable(); renderBillsTable();
+  if(!document.querySelector('.sale-item-row')) addSaleRow();
+  refreshAnYears();
+  if(document.getElementById('tab-analysis').classList.contains('active')) renderAnalysis();
+};
 RP.showSyncBanner('sale-sync-banner');
 
 // Set today's date
@@ -509,12 +787,12 @@ function renderMedResultsSaleRow(row, query){
   } else {
     resultsEl.innerHTML=matches.map(function(m){
       var outOfStock=m.qty<=0;
-      var costTxt=m.cost>0?'Cost:Rs.'+m.cost.toFixed(2):'';
+      var costTxt=m.cost>0?'Cost: Rs.'+m.cost.toFixed(2):'';
       var subTxt=m.tps>0?(' | '+m.tps+'/'+m.qtyType.replace(/s$/,'')):'';
       var metaTxt=outOfStock
         ? '<span style="color:var(--danger);font-weight:700;">Out of Stock</span>'
         : fmtQty(m.qty)+' '+esc(m.qtyType)+(costTxt?' | '+costTxt:'')+subTxt;
-      return '<div class="med-result-item'+(outOfStock?' med-result-out':'')+'" data-id="'+m.id+'" onmousedown="selectMedResultSale(this)">'+
+      return '<div class="med-result-item'+(outOfStock?' med-result-out':'')+'" data-id="'+esc(m.id)+'" onmousedown="selectMedResultSale(this)">'+
         '<div class="med-result-name" style="'+(outOfStock?'color:var(--danger);':'')+'">'+esc(m.name)+
           (m.brand?' <span class="med-result-brand">('+esc(m.brand)+')</span>':'')+'</div>'+
         '<div class="med-result-meta">'+metaTxt+'</div>'+
@@ -546,7 +824,7 @@ function onMedSearchBlurSale(input){
 function selectMedResultSale(el){
   var id=el.getAttribute('data-id');
   var row=el.closest('.sale-item-row');
-  var m=buildMedListSale().find(function(x){return x.id===id;});
+  var m=buildMedListSale().find(function(x){return String(x.id)===String(id);});
   if(!m) return;
   if(m.qty<=0){
     RP.toast(m.name+' is out of stock — add stock first before selling it.','error');
@@ -608,9 +886,9 @@ function removeSaleRow(id){
 }
 
 function checkMaxQtyRow(input){
-  var max=parseFloat(input.max)||99999;
+  var max=(input.max!==''&&!isNaN(parseFloat(input.max)))?parseFloat(input.max):99999;
   var val=parseFloat(input.value)||0;
-  if(val>max){ input.value=max; RP.toast('Max available: '+max,'warn'); }
+  if(val>max){ input.value=max>0?max:''; RP.toast(max>0?('Max available: '+max):'Not enough stock to sell as a whole unit.','warn'); }
 }
 
 /* ============================================================
@@ -661,7 +939,7 @@ function onMedSelectRow(row){
     row.querySelector('.row-stock-hint').textContent='';
     return;
   }
-  var m=buildMedListSale().find(function(x){return x.id===id;});
+  var m=buildMedListSale().find(function(x){return String(x.id)===String(id);});
   if(!m){ sellAsSel.style.display='none'; return; }
   if(m.tps>0){
     sellAsSel.innerHTML=
@@ -683,7 +961,7 @@ function applySellAsRow(row){
   var idInput=row.querySelector('.med-id-input');
   var id=idInput.value;
   if(!id) return;
-  var m=buildMedListSale().find(function(x){return x.id===id;});
+  var m=buildMedListSale().find(function(x){return String(x.id)===String(id);});
   if(!m) return;
   var sellAsSel=row.querySelector('.sell-as-select');
   var sellAs=(sellAsSel&&sellAsSel.style.display!=='none')?sellAsSel.value:'strip';
@@ -706,6 +984,7 @@ function applySellAsRow(row){
     hintEl.textContent='Available: '+availWhole+' '+m.qtyType+(m.cost>0?' | Cost: Rs.'+m.cost.toFixed(2)+'/'+m.qtyType.replace(/s$/,''):'');
   }
   row.dataset.sellAs=sellAs;
+  if(qtyInput.value) checkMaxQtyRow(qtyInput);
   recalcSale();
 }
 
@@ -744,7 +1023,7 @@ function recalcSale(){
     var m=medMap[id];
     var qty=parseFloat(row.querySelector('.row-qty').value)||0;
     var price=parseFloat(row.querySelector('.row-price').value)||0;
-    var discPct=parseFloat(row.querySelector('.row-disc').value)||0;
+    var discPct=Math.min(100,Math.max(0,parseFloat(row.querySelector('.row-disc').value)||0));
     if(!m||qty<=0||price<0) return;
 
     var sellAs=row.dataset.sellAs||'strip';
@@ -771,7 +1050,8 @@ function recalcSale(){
   }
 
   var grpType=document.getElementById('grp-disc-type').value;
-  var grpVal=parseFloat(document.getElementById('grp-disc-value').value)||0;
+  var grpVal=Math.max(0,parseFloat(document.getElementById('grp-disc-value').value)||0);
+  if(grpType!=='amount') grpVal=Math.min(100,grpVal);
   var grpDiscountAmount = grpType==='amount' ? Math.min(grpVal, grandAfterItem) : grandAfterItem*(grpVal/100);
   if(grpDiscountAmount<0) grpDiscountAmount=0;
 
@@ -850,6 +1130,21 @@ async function submitSale(){
   if(calc.lineItems.some(function(li){ return li.price <= 0; })){
     RP.toast('Please enter a valid price for all medicines.','error'); return;
   }
+
+  // Rows where text was typed but no medicine was picked from the list would be silently dropped
+  var unpicked=Array.prototype.some.call(document.querySelectorAll('.sale-item-row'),function(r){
+    return r.querySelector('.med-search-input').value.trim() && !r.querySelector('.med-id-input').value;
+  });
+  if(unpicked){ RP.toast('Pick a medicine from the search list for every row (or remove the empty row).','error'); return; }
+
+  // Total per medicine across ALL rows must not exceed stock (same medicine can be in several rows)
+  var need={};
+  calc.lineItems.forEach(function(li){
+    var d=(li.sellAs==='tablet'&&li.m.tps>0)?li.qty/li.m.tps:li.qty;
+    need[li.m.id]=(need[li.m.id]||0)+d;
+  });
+  var short=calc.lineItems.find(function(li){ return need[li.m.id]>li.m.qty+0.0001; });
+  if(short){ RP.toast('Not enough stock for '+short.m.name+' across the rows entered.','error'); return; }
 
   // Guard against double-clicking Record Sale, which would otherwise fire
   // this whole function twice and create duplicate sale rows.
@@ -963,11 +1258,31 @@ async function submitSale(){
       'Total: Rs.'+calc.grandFinal.toFixed(2)+'<br>'+
       '<span style="color:'+(calc.grandProfit>=0?'var(--success)':'var(--danger)')+';">'+
       'Profit: '+(calc.grandProfit>=0?'+':'')+'Rs.'+calc.grandProfit.toFixed(2)+'</span>';
+    // Snapshot this sale as a bill, so the "Save Bill" button can save it (individual or group)
+    var billItems=calc.lineItems.map(function(li){
+      return { name:li.m.name, qtyType:(li.sellAs==='tablet'&&li.m.tps>0)?'Units':li.m.qtyType,
+               qty:li.qty, mrp:li.price, total:parseFloat(li.finalAmount.toFixed(2)) };
+    }).concat(calc.extras.map(function(ex){
+      return { name:ex.description, qtyType:'Extra', qty:1, mrp:ex.amount, total:parseFloat(ex.amount.toFixed(2)) };
+    }));
+    pendingBill={
+      groupId:groupId,
+      customerName:(document.getElementById('s-customer').value||'').trim(),
+      date:date,
+      items:billItems,
+      grandTotal:parseFloat(billItems.reduce(function(s,it){ return s+it.total; },0).toFixed(2))
+    };
+    var sbb=document.getElementById('sale-save-bill-btn');
+    sbb.disabled=false; sbb.textContent='Save Bill';
     document.getElementById('sale-success-popup').classList.add('open');
 
     renderProfitSummary();
     renderHistory();
     updateBadge();
+  } catch(err){
+    console.error('submitSale failed:',err);
+    RP.toast('Could not save the sale completely: '+(err&&err.message?err.message:err)+'. Check View & Edit Sales and stock before retrying.','error');
+    renderProfitSummary(); renderHistory(); updateBadge();
   } finally {
     if(submitBtn){
       submitBtn.disabled=false;
@@ -978,6 +1293,7 @@ async function submitSale(){
 
 function closeSaleSuccess(){
   document.getElementById('sale-success-popup').classList.remove('open');
+  pendingBill=null;
   resetSaleForm();
 }
 
@@ -990,6 +1306,7 @@ function resetSaleForm(){
   document.getElementById('grp-disc-value').value='';
   onGroupDiscountTypeChange();
   document.getElementById('s-date').value=localDateStr();
+  document.getElementById('s-customer').value='';
   document.getElementById('price-breakdown').style.display='none';
   addSaleRow();
 }
@@ -1148,12 +1465,17 @@ renderHistory();
    TABS — Record Sale / View & Edit Sales
 ============================================================ */
 function switchSaleTab(tab){
+  var order=['record','view','bills','analysis'];
   document.querySelectorAll('.tab-btn').forEach(function(b,i){
-    b.classList.toggle('active', (i===0&&tab==='record')||(i===1&&tab==='view'));
+    b.classList.toggle('active', order[i]===tab);
   });
   document.getElementById('tab-record').classList.toggle('active', tab==='record');
   document.getElementById('tab-view').classList.toggle('active', tab==='view');
+  document.getElementById('tab-bills').classList.toggle('active', tab==='bills');
+  document.getElementById('tab-analysis').classList.toggle('active', tab==='analysis');
   if(tab==='view') renderSalesTable();
+  if(tab==='bills') renderBillsTable();
+  if(tab==='analysis') renderAnalysis();
 }
 
 function clearSaleFilters(){
@@ -1268,6 +1590,758 @@ function renderSalesTable(){
   wrap.innerHTML='<div>'+bodyHtml+'</div>';
 }
 
+/* ============================================================
+   SALES ANALYSIS — weekly / monthly / month-to-month / yearly
+   graphs, built on Chart.js. All periods reuse the same
+   aggregation pipeline: pick a date range + a list of "buckets"
+   (days or months) -> filter sales into that range -> sum
+   revenue/cost/profit/qty per bucket -> feed Chart.js.
+============================================================ */
+var anCategory   = 'weekly';   // daily | weekly | monthly | compare | yearly
+var anTrendType  = 'bar';      // bar | line | area
+var anTrendField = 'all';      // all | sell | cost | profit  (main trend chart)
+var anTopType    = 'bar';      // bar | pie | doughnut
+var anTopMetric  = 'revenue';  // revenue | profit | qty
+var anSpView     = 'period';   // period | medicine  (Total Selling vs Profit chart)
+var anSpType     = 'bar';      // bar | line          (Total Selling vs Profit chart)
+var chartTrend=null, chartType=null, chartTop=null, chartSellProfit=null;
+
+var AN_PALETTE=['#00d4aa','#3b82f6','#f59e0b','#ef4444','#a855f7','#ec4899','#14b8a6','#eab308','#6366f1','#84cc16','#f97316','#06b6d4'];
+
+function anThemeColor(varName, fallback){
+  var v=getComputedStyle(document.documentElement).getPropertyValue(varName);
+  return (v&&v.trim())||fallback;
+}
+function anMonthLabel(ym){ // "2026-09" -> "Sep 2026"
+  var y=parseInt(ym.slice(0,4),10), m=parseInt(ym.slice(5,7),10);
+  return new Date(y,m-1,1).toLocaleDateString('en-IN',{month:'short',year:'numeric'});
+}
+function anAddDays(dateStr,n){
+  var d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n); return localDateStr(d);
+}
+function anAddMonths(ym,n){
+  var y=parseInt(ym.slice(0,4),10), m=parseInt(ym.slice(5,7),10)-1+n;
+  y+=Math.floor(m/12); m=((m%12)+12)%12;
+  return y+'-'+String(m+1).padStart(2,'0');
+}
+function anDaysInMonth(ym){
+  var y=parseInt(ym.slice(0,4),10), m=parseInt(ym.slice(5,7),10);
+  return new Date(y,m,0).getDate();
+}
+
+/* ---- Category / control switching ---- */
+function switchAnCategory(cat,el){
+  anCategory=cat;
+  document.querySelectorAll('.an-cat-chip').forEach(function(c){ c.classList.remove('active'); });
+  el.classList.add('active');
+  document.querySelectorAll('.an-subcontrol').forEach(function(c){ c.classList.remove('active'); });
+  document.getElementById('an-sub-'+cat).classList.add('active');
+  renderAnalysis();
+}
+function shiftAnWeek(dir){
+  var el=document.getElementById('an-week-date');
+  el.value=anAddDays(el.value||localDateStr(), dir*7);
+  renderAnalysis();
+}
+function shiftAnDay(dir){
+  var el=document.getElementById('an-day-date');
+  el.value=anAddDays(el.value||localDateStr(), dir);
+  renderAnalysis();
+}
+function setAnTrendField(val,el){
+  anTrendField=val;
+  document.querySelectorAll('#an-trend-field-row .chart-toggle-btn').forEach(function(b){ b.classList.toggle('active', b===el); });
+  renderAnalysis();
+}
+function shiftAnMonth(dir){
+  var el=document.getElementById('an-month');
+  el.value=anAddMonths(el.value||localDateStr().slice(0,7), dir);
+  renderAnalysis();
+}
+function setAnTrendType(val,el){
+  anTrendType=val;
+  document.querySelectorAll('#an-trend-type-row .chart-toggle-btn').forEach(function(b){ b.classList.toggle('active', b===el); });
+  renderAnalysis();
+}
+function setAnTopType(val,el){
+  anTopType=val;
+  document.querySelectorAll('#an-top-type-row .chart-toggle-btn').forEach(function(b){ b.classList.toggle('active', b===el); });
+  renderAnalysis();
+}
+function setAnTopMetric(val,el){
+  anTopMetric=val;
+  el.parentElement.querySelectorAll('.chart-toggle-btn').forEach(function(b){ b.classList.toggle('active', b===el); });
+  renderAnalysis();
+}
+function setAnSellProfitView(val,el){
+  anSpView=val;
+  document.querySelectorAll('#an-sp-view-row .chart-toggle-btn').forEach(function(b){ b.classList.toggle('active', b===el); });
+  renderAnalysis();
+}
+function setAnSellProfitType(val,el){
+  anSpType=val;
+  document.querySelectorAll('#an-sp-type-row .chart-toggle-btn').forEach(function(b){ b.classList.toggle('active', b===el); });
+  renderAnalysis();
+}
+
+/* ---- One-time control setup (default dates, year list) ---- */
+function initAnalysisControls(){
+  var today=localDateStr();
+  document.getElementById('an-day-date').value=today;
+  document.getElementById('an-week-date').value=today;
+  var thisMonth=today.slice(0,7);
+  document.getElementById('an-month').value=thisMonth;
+  document.getElementById('an-cmp-from').value=anAddMonths(thisMonth,-2);
+  document.getElementById('an-cmp-to').value=thisMonth;
+
+  refreshAnYears();
+}
+function refreshAnYears(){
+  var sel=document.getElementById('an-year');
+  var keep=sel.value;
+  var years={}; RP_SALES.getAll().forEach(function(s){
+    var y=(s.date||'').slice(0,4); if(y) years[y]=true;
+  });
+  var curYear=String(new Date().getFullYear());
+  years[curYear]=true;
+  var yearArr=Object.keys(years).sort().reverse();
+  var pick=(keep&&years[keep])?keep:curYear;
+  sel.innerHTML=yearArr.map(function(y){
+    return '<option value="'+y+'"'+(y===pick?' selected':'')+'>'+y+'</option>';
+  }).join('');
+}
+
+/* ---- Build the {from, to, buckets[], labels[], keyFn} for the active category ---- */
+function anBuildPeriod(){
+  if(anCategory==='daily'){
+    var day=document.getElementById('an-day-date').value||localDateStr();
+    // Daily doesn't use fixed buckets — it's broken down per actual sale
+    // transaction (chronologically) once we know what sold that day, so
+    // buckets/labels/keyFn are built later from the sales themselves.
+    return { from:day, to:day, buckets:null, labels:null, keyFn:null, isDaily:true };
+  }
+  if(anCategory==='weekly'){
+    var pick=document.getElementById('an-week-date').value||localDateStr();
+    var d=new Date(pick+'T00:00:00');
+    var dow=d.getDay(); // 0=Sun..6=Sat
+    var diffToMon=(dow===0?-6:1-dow);
+    var monday=new Date(d); monday.setDate(d.getDate()+diffToMon);
+    var buckets=[]; for(var i=0;i<7;i++){ var dd=new Date(monday); dd.setDate(monday.getDate()+i); buckets.push(localDateStr(dd)); }
+    var labels=buckets.map(function(b){
+      return new Date(b+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short'})+' '+b.slice(8,10);
+    });
+    document.getElementById('an-week-range').textContent=RP.fmtDate(buckets[0])+' – '+RP.fmtDate(buckets[6]);
+    return { from:buckets[0], to:buckets[6], buckets:buckets, labels:labels, keyFn:function(s){ return s.date; } };
+  }
+  if(anCategory==='monthly'){
+    var mv=document.getElementById('an-month').value||localDateStr().slice(0,7);
+    var dim=anDaysInMonth(mv);
+    var buckets=[]; for(var d2=1; d2<=dim; d2++) buckets.push(mv+'-'+String(d2).padStart(2,'0'));
+    var labels=buckets.map(function(b){ return b.slice(8,10); });
+    return { from:buckets[0], to:buckets[buckets.length-1], buckets:buckets, labels:labels, keyFn:function(s){ return s.date; } };
+  }
+  if(anCategory==='compare'){
+    var fromV=document.getElementById('an-cmp-from').value;
+    var toV=document.getElementById('an-cmp-to').value;
+    if(!fromV||!toV){ var t=localDateStr().slice(0,7); fromV=fromV||t; toV=toV||t; }
+    if(fromV>toV){ var tmp=fromV; fromV=toV; toV=tmp; }
+    var buckets=[]; var cur=fromV; var guard=0;
+    while(cur<=toV && guard<60){ buckets.push(cur); cur=anAddMonths(cur,1); guard++; }
+    var labels=buckets.map(anMonthLabel);
+    var lastDim=anDaysInMonth(buckets[buckets.length-1]);
+    return {
+      from:buckets[0]+'-01',
+      to:buckets[buckets.length-1]+'-'+String(lastDim).padStart(2,'0'),
+      buckets:buckets, labels:labels, keyFn:function(s){ return (s.date||'').slice(0,7); }
+    };
+  }
+  // yearly
+  var yr=document.getElementById('an-year').value||String(new Date().getFullYear());
+  var buckets=[]; for(var m=1;m<=12;m++) buckets.push(yr+'-'+String(m).padStart(2,'0'));
+  var labels=buckets.map(function(b){ return b.slice(5,7)==='01'?anMonthLabel(b):anMonthLabel(b).slice(0,3); });
+  return { from:yr+'-01-01', to:yr+'-12-31', buckets:buckets, labels:labels, keyFn:function(s){ return (s.date||'').slice(0,7); } };
+}
+
+/* ---- Main render: stats + all three charts ---- */
+function renderAnalysis(){
+  if(typeof Chart==='undefined'){
+    document.getElementById('an-stat-grid').innerHTML=
+      '<div class="an-stat-card" style="grid-column:1/-1;text-align:center;color:var(--danger);">'+
+      '&#9888;&#65039; Charts library failed to load. Check your internet connection and refresh the page.'+
+      '</div>';
+    ['an-trend-empty','an-type-empty','an-top-empty','an-sp-empty'].forEach(function(id){
+      var el=document.getElementById(id);
+      el.innerHTML='<div class="ceo-icon">&#9888;&#65039;</div><p>Charts library failed to load.<br>Check your connection and refresh.</p>';
+      el.classList.add('show');
+    });
+    return;
+  }
+  // Deferred one frame: right after switching tabs, the canvas' parent has
+  // just gone from display:none to visible, and its measured width can
+  // still be 0 in the same tick. Waiting a frame lets the browser lay it
+  // out first, so Chart.js gets real dimensions instead of drawing at 0x0.
+  requestAnimationFrame(function(){
+    try {
+      var period=anBuildPeriod();
+      var sales=RP_SALES.getRange(period.from, period.to);
+
+      renderAnStats(sales, period);
+      renderAnTrendChart(sales, period);
+      renderAnTypeChart(sales);
+      renderAnTopChart(sales);
+      renderAnSellProfitChart(sales, period);
+    } catch(err){
+      // Surface the real error on-screen instead of failing silently in the
+      // console — this is what lets us actually fix whatever goes wrong.
+      document.getElementById('an-stat-grid').innerHTML=
+        '<div class="an-stat-card" style="grid-column:1/-1;background:rgba(239,68,68,.08);border-color:var(--danger);">'+
+        '<div class="as-label" style="color:var(--danger);">Something went wrong building the Sales Analysis view</div>'+
+        '<div style="font-family:monospace;font-size:.78rem;color:var(--danger);margin-top:6px;white-space:pre-wrap;word-break:break-word;">'+
+        esc(err && err.message ? err.message : String(err))+
+        '</div>'+
+        '<div style="font-size:.72rem;color:var(--muted);margin-top:8px;">Please screenshot this and share it so it can be fixed.</div>'+
+        '</div>';
+      if(window.console && console.error) console.error('Sales Analysis render error:', err);
+    }
+  });
+}
+
+function renderAnStats(sales, period){
+  var revenue=sales.reduce(function(s,x){ return s+(parseFloat(x.totalSelling)||0); },0);
+  var cost=sales.reduce(function(s,x){ return s+(parseFloat(x.totalCost)||0); },0);
+  var profit=RP_SALES.getProfit(sales);
+  var qty=sales.reduce(function(s,x){ return s+(x.soldAs==='extra'?0:(parseFloat(x.qtySold)||0)); },0);
+  var txns=countTransactions(sales);
+  var margin=revenue>0?(profit/revenue*100):0;
+
+  function card(label,val,sub,color){
+    return '<div class="an-stat-card">'+
+      '<div class="as-label">'+label+'</div>'+
+      '<div class="as-val" style="color:'+color+';">'+val+'</div>'+
+      (sub?'<div class="as-sub">'+sub+'</div>':'')+
+    '</div>';
+  }
+  document.getElementById('an-stat-grid').innerHTML=
+    card('Total Selling','Rs. '+revenue.toFixed(2),txns+' transaction(s)','var(--accent2,var(--accent))')+
+    card('Total Cost','Rs. '+cost.toFixed(2),'','var(--warn)')+
+    card('Profit',(profit>=0?'+':'')+'Rs. '+profit.toFixed(2),margin.toFixed(1)+'% margin',profit>=0?'var(--success)':'var(--danger)')+
+    card('Units Sold',fmtQty(qty),'Excludes extra charges','var(--accent)')+
+    card('Avg. Sale Value','Rs. '+(txns>0?(revenue/txns).toFixed(2):'0.00'),'Per transaction','var(--text)');
+}
+
+function anDestroy(c){ if(c){ try{ c.destroy(); }catch(e){} } }
+
+/* Groups a single day's sales into one entry per transaction (shared
+   groupId, or the sale's own id for a single-item sale), ordered by the
+   time it was made — this is what powers the "Daily" period, since a
+   single calendar day has no natural buckets of its own. */
+function anBuildDailyTxns(sales){
+  var byTxn={};
+  sales.forEach(function(s){
+    var key=s.groupId||s.id;
+    if(!byTxn[key]) byTxn[key]={ time:s.createdOn||'', sell:0, cost:0, profit:0 };
+    byTxn[key].sell+=parseFloat(s.totalSelling)||0;
+    byTxn[key].cost+=parseFloat(s.totalCost)||0;
+    byTxn[key].profit+=parseFloat(s.profit)||0;
+    if(s.createdOn && (!byTxn[key].time || s.createdOn<byTxn[key].time)) byTxn[key].time=s.createdOn;
+  });
+  var keys=Object.keys(byTxn).sort(function(a,b){ return (byTxn[a].time||'').localeCompare(byTxn[b].time||''); });
+  var labels=keys.map(function(k,i){
+    var t=byTxn[k].time;
+    if(t){
+      var d=new Date(t);
+      if(!isNaN(d.getTime())) return d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    }
+    return 'Sale '+(i+1);
+  });
+  return { keys:keys, labels:labels, map:byTxn };
+}
+
+/* Shared by the main trend chart and the "By Period" view of the Total
+   Selling vs Profit chart — returns aligned {labels, sell, cost, profit}
+   arrays for whichever period is active, daily included. */
+function anGetPeriodSeries(sales, period){
+  if(period.isDaily){
+    var dtx=anBuildDailyTxns(sales);
+    return {
+      labels:dtx.labels,
+      sell:dtx.keys.map(function(k){ return +dtx.map[k].sell.toFixed(2); }),
+      cost:dtx.keys.map(function(k){ return +dtx.map[k].cost.toFixed(2); }),
+      profit:dtx.keys.map(function(k){ return +dtx.map[k].profit.toFixed(2); })
+    };
+  }
+  var map={}; period.buckets.forEach(function(k){ map[k]={sell:0,cost:0,profit:0}; });
+  sales.forEach(function(s){
+    var k=period.keyFn(s);
+    if(!map[k]) return;
+    map[k].sell+=parseFloat(s.totalSelling)||0;
+    map[k].cost+=parseFloat(s.totalCost)||0;
+    map[k].profit+=parseFloat(s.profit)||0;
+  });
+  return {
+    labels:period.labels,
+    sell:period.buckets.map(function(k){ return +map[k].sell.toFixed(2); }),
+    cost:period.buckets.map(function(k){ return +map[k].cost.toFixed(2); }),
+    profit:period.buckets.map(function(k){ return +map[k].profit.toFixed(2); })
+  };
+}
+
+function anHexToRgba(hex, alpha){
+  var h=hex.replace('#','');
+  var r=parseInt(h.substring(0,2),16), g=parseInt(h.substring(2,4),16), b=parseInt(h.substring(4,6),16);
+  return 'rgba('+r+','+g+','+b+','+alpha+')';
+}
+
+function renderAnTrendChart(sales, period){
+  var overlay=document.getElementById('an-trend-empty');
+  anDestroy(chartTrend);
+
+  if(!sales.length){
+    overlay.classList.add('show');
+    return;
+  }
+
+  var series=anGetPeriodSeries(sales, period);
+  if(!series.labels.length){ overlay.classList.add('show'); return; }
+  overlay.classList.remove('show');
+
+  var textColor=anThemeColor('--muted','#94a3b8');
+  var gridColor=anThemeColor('--border','rgba(148,163,184,.15)');
+  var isLine=(anTrendType==='line'||anTrendType==='area');
+  var fill=(anTrendType==='area');
+
+  var allSeries=[
+    {key:'sell',   label:'Total Selling', color:'#00d4aa', data:series.sell},
+    {key:'cost',   label:'Total Cost',    color:'#f59e0b', data:series.cost},
+    {key:'profit', label:'Profit',        color:'#3b82f6', data:series.profit}
+  ];
+  var chosen = (anTrendField==='all') ? allSeries : allSeries.filter(function(d){ return d.key===anTrendField; });
+
+  var datasets=chosen.map(function(d){
+    return {
+      label:d.label, data:d.data,
+      backgroundColor: isLine?anHexToRgba(d.color,.15):d.color,
+      borderColor:d.color, borderWidth:2, tension:.35, fill:fill, borderRadius:isLine?0:6
+    };
+  });
+
+  chartTrend=new Chart(document.getElementById('an-trend-chart').getContext('2d'),{
+    type: isLine?'line':'bar',
+    data:{ labels:series.labels, datasets:datasets },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{ legend:{labels:{color:textColor,usePointStyle:true}},
+        tooltip:{callbacks:{ label:function(ctx){ return ctx.dataset.label+': Rs.'+ctx.parsed.y.toFixed(2); } } } },
+      scales:{
+        x:{ ticks:{color:textColor}, grid:{color:gridColor} },
+        y:{ ticks:{color:textColor, callback:function(v){ return 'Rs.'+v; }}, grid:{color:gridColor} }
+      }
+    }
+  });
+}
+
+function renderAnTypeChart(sales){
+  var overlay=document.getElementById('an-type-empty');
+  anDestroy(chartType);
+
+  var real=sales.filter(function(s){ return s.soldAs!=='extra'; });
+  if(!real.length){ overlay.classList.add('show'); return; }
+  overlay.classList.remove('show');
+
+  var stockById={}; RP.getStock().forEach(function(it){ stockById[it.id]=it; });
+  var byType={};
+  real.forEach(function(s){
+    var it=stockById[s.stockId];
+    var t=(it&&it.medType)?it.medType:'Other';
+    byType[t]=(byType[t]||0)+(parseFloat(s.totalSelling)||0);
+  });
+  var labels=Object.keys(byType).sort(function(a,b){ return byType[b]-byType[a]; });
+  var data=labels.map(function(l){ return +byType[l].toFixed(2); });
+  var colors=labels.map(function(_,i){ return AN_PALETTE[i%AN_PALETTE.length]; });
+  var textColor=anThemeColor('--muted','#94a3b8');
+  var surfaceColor=anThemeColor('--surface','#111827');
+
+  chartType=new Chart(document.getElementById('an-type-chart').getContext('2d'),{
+    type:'doughnut',
+    data:{ labels:labels, datasets:[{ data:data, backgroundColor:colors, borderColor:surfaceColor, borderWidth:2 }] },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'bottom', labels:{color:textColor,boxWidth:12,padding:12} },
+        tooltip:{ callbacks:{ label:function(ctx){
+          var tot=ctx.dataset.data.reduce(function(a,b){return a+b;},0);
+          var pct=tot>0?(ctx.parsed/tot*100).toFixed(1):'0.0';
+          return ctx.label+': Rs.'+ctx.parsed.toFixed(2)+' ('+pct+'%)';
+        } } }
+      }
+    }
+  });
+}
+
+function renderAnTopChart(sales){
+  var overlay=document.getElementById('an-top-empty');
+  anDestroy(chartTop);
+
+  var real=sales.filter(function(s){ return s.soldAs!=='extra'; });
+  if(!real.length){ overlay.classList.add('show'); return; }
+  overlay.classList.remove('show');
+
+  var byMed={};
+  real.forEach(function(s){
+    var name=s.medicineName||'Unknown';
+    if(!byMed[name]) byMed[name]={revenue:0,profit:0,qty:0};
+    byMed[name].revenue+=parseFloat(s.totalSelling)||0;
+    byMed[name].profit+=parseFloat(s.profit)||0;
+    byMed[name].qty+=parseFloat(s.qtySold)||0;
+  });
+  var names=Object.keys(byMed);
+  names.sort(function(a,b){ return byMed[b][anTopMetric]-byMed[a][anTopMetric]; });
+
+  var TOP_N=6;
+  var top=names.slice(0,TOP_N);
+  var rest=names.slice(TOP_N);
+  var labels=top.slice();
+  var values=top.map(function(n){ return +byMed[n][anTopMetric].toFixed(2); });
+  if(rest.length){
+    var othersVal=rest.reduce(function(s,n){ return s+byMed[n][anTopMetric]; },0);
+    labels.push('Others ('+rest.length+')');
+    values.push(+othersVal.toFixed(2));
+  }
+  var colors=labels.map(function(_,i){ return AN_PALETTE[i%AN_PALETTE.length]; });
+  var textColor=anThemeColor('--muted','#94a3b8');
+  var gridColor=anThemeColor('--border','rgba(148,163,184,.15)');
+  var surfaceColor=anThemeColor('--surface','#111827');
+  var isMoney=(anTopMetric==='revenue'||anTopMetric==='profit');
+  var metricLabel=anTopMetric==='revenue'?'Total Selling (Rs.)':(anTopMetric==='profit'?'Profit (Rs.)':'Quantity');
+  var isPie=(anTopType==='pie'||anTopType==='doughnut');
+
+  var cfg;
+  if(isPie){
+    cfg={
+      type:anTopType,
+      data:{ labels:labels, datasets:[{ data:values, backgroundColor:colors, borderColor:surfaceColor, borderWidth:2 }] },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{
+          legend:{ position:'right', labels:{color:textColor,boxWidth:12,padding:10} },
+          tooltip:{ callbacks:{ label:function(ctx){
+            return ctx.label+': '+(isMoney?'Rs.'+ctx.parsed.toFixed(2):fmtQty(ctx.parsed));
+          } } }
+        }
+      }
+    };
+  } else {
+    cfg={
+      type:'bar',
+      data:{ labels:labels, datasets:[{ label:metricLabel, data:values, backgroundColor:colors, borderRadius:6 }] },
+      options:{
+        indexAxis:'y',
+        responsive:true,maintainAspectRatio:false,
+        plugins:{
+          legend:{ display:false },
+          tooltip:{ callbacks:{ label:function(ctx){
+            return isMoney?'Rs.'+ctx.parsed.x.toFixed(2):fmtQty(ctx.parsed.x);
+          } } }
+        },
+        scales:{
+          x:{ ticks:{color:textColor}, grid:{color:gridColor} },
+          y:{ ticks:{color:textColor}, grid:{display:false} }
+        }
+      }
+    };
+  }
+  chartTop=new Chart(document.getElementById('an-top-chart').getContext('2d'), cfg);
+}
+
+function renderAnSellProfitChart(sales, period){
+  var overlay=document.getElementById('an-sp-empty');
+  anDestroy(chartSellProfit);
+
+  if(!sales.length){ overlay.classList.add('show'); return; }
+  overlay.classList.remove('show');
+
+  var textColor=anThemeColor('--muted','#94a3b8');
+  var gridColor=anThemeColor('--border','rgba(148,163,184,.15)');
+  var isLine=(anSpType==='line');
+  var labels, sellData, profitData;
+
+  if(anSpView==='period'){
+    // Same series as the main trend chart — one point per day
+    // (weekly/monthly), per month (compare/yearly), or per transaction
+    // (daily) — but isolated to just Selling vs Profit.
+    var series=anGetPeriodSeries(sales, period);
+    labels=series.labels; sellData=series.sell; profitData=series.profit;
+    if(!labels.length){ overlay.classList.add('show'); return; }
+  } else {
+    // By medicine — top sellers, so you can see which items bring in
+    // revenue but not much profit (and vice versa).
+    var real=sales.filter(function(s){ return s.soldAs!=='extra'; });
+    var byMed={};
+    real.forEach(function(s){
+      var name=s.medicineName||'Unknown';
+      if(!byMed[name]) byMed[name]={selling:0,profit:0};
+      byMed[name].selling+=parseFloat(s.totalSelling)||0;
+      byMed[name].profit+=parseFloat(s.profit)||0;
+    });
+    var names=Object.keys(byMed).sort(function(a,b){ return byMed[b].selling-byMed[a].selling; });
+    var TOP_N=8;
+    var top=names.slice(0,TOP_N);
+    var rest=names.slice(TOP_N);
+    labels=top.slice();
+    sellData=top.map(function(n){ return +byMed[n].selling.toFixed(2); });
+    profitData=top.map(function(n){ return +byMed[n].profit.toFixed(2); });
+    if(rest.length){
+      var restSell=rest.reduce(function(s,n){ return s+byMed[n].selling; },0);
+      var restProfit=rest.reduce(function(s,n){ return s+byMed[n].profit; },0);
+      labels.push('Others ('+rest.length+')');
+      sellData.push(+restSell.toFixed(2));
+      profitData.push(+restProfit.toFixed(2));
+    }
+    if(!top.length){ overlay.classList.add('show'); return; }
+  }
+
+  chartSellProfit=new Chart(document.getElementById('an-sp-chart').getContext('2d'),{
+    type: isLine?'line':'bar',
+    data:{
+      labels:labels,
+      datasets:[
+        {label:'Total Selling', data:sellData, backgroundColor:isLine?'rgba(0,212,170,.12)':'#00d4aa', borderColor:'#00d4aa', borderWidth:2, tension:.35, fill:isLine, borderRadius:isLine?0:6},
+        {label:'Profit', data:profitData, backgroundColor:isLine?'rgba(59,130,246,.12)':'#3b82f6', borderColor:'#3b82f6', borderWidth:2, tension:.35, fill:isLine, borderRadius:isLine?0:6}
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{ labels:{color:textColor, usePointStyle:true} },
+        tooltip:{ callbacks:{ label:function(ctx){
+          var val=ctx.parsed.y;
+          if(ctx.datasetIndex===1){
+            var sellVal=ctx.chart.data.datasets[0].data[ctx.dataIndex]||0;
+            var margin=sellVal>0?(val/sellVal*100):0;
+            return 'Profit: Rs.'+val.toFixed(2)+' ('+margin.toFixed(1)+'% margin)';
+          }
+          return 'Total Selling: Rs.'+val.toFixed(2);
+        } } }
+      },
+      scales:{
+        x:{ ticks:{color:textColor, maxRotation: anSpView==='medicine'?30:0, minRotation: anSpView==='medicine'?30:0}, grid:{color:gridColor} },
+        y:{ ticks:{color:textColor, callback:function(v){ return 'Rs.'+v; }}, grid:{color:gridColor} }
+      }
+    }
+  });
+}
+
+/* ============================================================
+   SALES ANALYSIS — REPORT DOWNLOAD
+   Two options: a raw CSV of the underlying sale rows for the
+   selected period, and a polished, print-ready HTML report
+   (opens in a new tab; "Print / Save as PDF" uses the browser's
+   own print-to-PDF — no extra library needed).
+============================================================ */
+function anPeriodLabel(period){
+  if(anCategory==='daily'){
+    return 'Day: '+RP.fmtDate(period.from);
+  }
+  if(anCategory==='weekly'){
+    return 'Week: '+RP.fmtDate(period.from)+' – '+RP.fmtDate(period.to);
+  }
+  if(anCategory==='monthly'){
+    var mv=document.getElementById('an-month').value||period.from.slice(0,7);
+    var y=parseInt(mv.slice(0,4),10), m=parseInt(mv.slice(5,7),10);
+    return new Date(y,m-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  }
+  if(anCategory==='compare'){
+    return anMonthLabel(period.buckets[0])+' – '+anMonthLabel(period.buckets[period.buckets.length-1]);
+  }
+  return 'Year '+(document.getElementById('an-year').value||period.buckets[0].slice(0,4));
+}
+
+function anAggregateForReport(sales, period){
+  var revenue=sales.reduce(function(s,x){ return s+(parseFloat(x.totalSelling)||0); },0);
+  var cost=sales.reduce(function(s,x){ return s+(parseFloat(x.totalCost)||0); },0);
+  var profit=RP_SALES.getProfit(sales);
+  var qty=sales.reduce(function(s,x){ return s+(x.soldAs==='extra'?0:(parseFloat(x.qtySold)||0)); },0);
+  var txns=countTransactions(sales);
+  var margin=revenue>0?(profit/revenue*100):0;
+  var avgSale=txns>0?(revenue/txns):0;
+
+  var series=anGetPeriodSeries(sales, period);
+  var bucketRows=series.labels.map(function(label,i){
+    return { label:label, revenue:series.sell[i], cost:series.cost[i], profit:series.profit[i] };
+  });
+
+  var real=sales.filter(function(s){ return s.soldAs!=='extra'; });
+  var stockById={}; RP.getStock().forEach(function(it){ stockById[it.id]=it; });
+  var byMed={}; var byType={};
+  real.forEach(function(s){
+    var name=s.medicineName||'Unknown';
+    if(!byMed[name]) byMed[name]={qty:0,revenue:0};
+    byMed[name].qty+=parseFloat(s.qtySold)||0;
+    byMed[name].revenue+=parseFloat(s.totalSelling)||0;
+    var it=stockById[s.stockId];
+    var t=(it&&it.medType)?it.medType:'Other';
+    byType[t]=(byType[t]||0)+(parseFloat(s.totalSelling)||0);
+  });
+
+  var medNames=Object.keys(byMed).sort(function(a,b){ return byMed[b].revenue-byMed[a].revenue; });
+  var topMeds=medNames.slice(0,10).map(function(n){ return {name:n,qty:byMed[n].qty,revenue:byMed[n].revenue}; });
+  if(medNames.length>10){
+    var restNames=medNames.slice(10);
+    var restQty=restNames.reduce(function(s,n){ return s+byMed[n].qty; },0);
+    var restRev=restNames.reduce(function(s,n){ return s+byMed[n].revenue; },0);
+    topMeds.push({ name:'Others ('+restNames.length+' items)', qty:restQty, revenue:restRev });
+  }
+
+  var typeNames=Object.keys(byType).sort(function(a,b){ return byType[b]-byType[a]; });
+  var typeTotal=typeNames.reduce(function(s,t){ return s+byType[t]; },0);
+  var typeRows=typeNames.map(function(t){
+    return { type:t, revenue:byType[t], pct: typeTotal>0?(byType[t]/typeTotal*100):0 };
+  });
+
+  return { revenue:revenue, cost:cost, profit:profit, qty:qty, txns:txns, margin:margin, avgSale:avgSale,
+    bucketRows:bucketRows, topMeds:topMeds, typeRows:typeRows };
+}
+
+function downloadAnalysisCSV(){
+  var period=anBuildPeriod();
+  var sales=RP_SALES.getRange(period.from, period.to);
+  if(!sales.length){ RP.toast('No sales in this period to download.','warn'); return; }
+
+  var headers=['Date','Batch ID','Medicine','Qty Sold','Unit','Cost/Unit','MRP/Unit',
+    'Item Discount%','Group Discount (Rs)','Effective Discount%','Selling Price/Unit',
+    'Total Selling','Total Cost','Profit'];
+  var rows=sales.map(function(s){
+    return [
+      s.date||'',
+      csvCell(s.groupId||s.id||''),
+      csvCell(s.medicineName||''),
+      s.qtySold,
+      csvCell(s.qtyType||''),
+      parseFloat(s.costPricePerUnit||0).toFixed(2),
+      parseFloat(s.mrpPerUnit||0).toFixed(2),
+      parseFloat(s.itemDiscountPct||0).toFixed(1),
+      parseFloat(s.groupDiscountShare||0).toFixed(2),
+      parseFloat(s.discountPct||0).toFixed(1),
+      parseFloat(s.sellingPricePerUnit||0).toFixed(2),
+      parseFloat(s.totalSelling||0).toFixed(2),
+      parseFloat(s.totalCost||0).toFixed(2),
+      parseFloat(s.profit||0).toFixed(2)
+    ].join(',');
+  });
+
+  var csv='\uFEFF'+[headers.join(',')].concat(rows).join('\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='sales-report_'+anCategory+'_'+period.from+'_to_'+period.to+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+var AN_REPORT_CSS=
+  '*{box-sizing:border-box;}'+
+  'body{font-family:Arial,Helvetica,sans-serif;background:#eef1f6;margin:0;padding:24px;color:#111;}'+
+  '.toolbar{max-width:840px;margin:0 auto 14px;display:flex;gap:10px;justify-content:flex-end;}'+
+  '.toolbar button{padding:9px 18px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-size:.85rem;font-weight:700;}'+
+  '.toolbar button.primary{background:#00d4aa;color:#fff;border-color:#00d4aa;}'+
+  '.sheet{max-width:840px;margin:0 auto;background:#fff;border:1px solid #dde3ee;border-radius:8px;overflow:hidden;}'+
+  '.rep-header{background:#1a2535;color:#fff;padding:28px 32px;text-align:center;}'+
+  '.rep-brand{font-size:25px;font-weight:800;letter-spacing:.5px;}'+
+  '.rep-sub{margin-top:5px;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#94a3b8;}'+
+  '.rep-meta{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:14px 32px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:13px;}'+
+  '.rep-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:24px 32px 6px;}'+
+  '@media(max-width:600px){.rep-stats{grid-template-columns:repeat(2,1fr);}}'+
+  '.stat-box{border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;background:#f8fafc;}'+
+  '.sb-label{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;}'+
+  '.sb-val{font-size:18px;font-weight:800;margin-top:4px;color:#111;}'+
+  'h3{margin:28px 32px 10px;font-size:14px;color:#1a2535;border-left:4px solid #00d4aa;padding-left:10px;}'+
+  'table{width:calc(100% - 64px);margin:0 32px 4px;border-collapse:collapse;font-size:12.5px;}'+
+  'th{background:#1a2535;color:#fff;text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;}'+
+  'td{padding:7px 10px;border-bottom:1px solid #eef1f6;}'+
+  'tr:nth-child(even) td{background:#f8fafc;}'+
+  '.num{text-align:right;font-family:"Courier New",monospace;}'+
+  '.rep-footer{padding:22px 32px 30px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;margin-top:22px;}'+
+  '@media print{ body{background:#fff;padding:0;} .toolbar{display:none;} .sheet{border:none;border-radius:0;max-width:100%;} tr{page-break-inside:avoid;} }';
+
+function downloadAnalysisReport(){
+  var period=anBuildPeriod();
+  var sales=RP_SALES.getRange(period.from, period.to);
+  if(!sales.length){ RP.toast('No sales in this period to report.','warn'); return; }
+
+  var agg=anAggregateForReport(sales, period);
+  var periodLabel=anPeriodLabel(period);
+  var generatedStr=new Date().toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  function money(v){ return 'Rs. '+(parseFloat(v)||0).toFixed(2); }
+  function statBox(label,val){
+    return '<div class="stat-box"><div class="sb-label">'+label+'</div><div class="sb-val">'+val+'</div></div>';
+  }
+
+  var bucketRowsHtml=agg.bucketRows.map(function(r){
+    return '<tr><td>'+esc(r.label)+'</td><td class="num">'+money(r.revenue)+'</td><td class="num">'+money(r.cost)+'</td>'+
+      '<td class="num" style="color:'+(r.profit>=0?'#15803d':'#b91c1c')+';font-weight:700;">'+(r.profit>=0?'+':'')+money(r.profit)+'</td></tr>';
+  }).join('');
+
+  var topMedsHtml=agg.topMeds.map(function(m,i){
+    var pct=agg.revenue>0?(m.revenue/agg.revenue*100):0;
+    return '<tr><td>'+(i+1)+'</td><td>'+esc(m.name)+'</td><td class="num">'+fmtQty(m.qty)+'</td>'+
+      '<td class="num">'+money(m.revenue)+'</td><td class="num">'+pct.toFixed(1)+'%</td></tr>';
+  }).join('');
+
+  var typeRowsHtml=agg.typeRows.map(function(t){
+    return '<tr><td>'+esc(t.type)+'</td><td class="num">'+money(t.revenue)+'</td><td class="num">'+t.pct.toFixed(1)+'%</td></tr>';
+  }).join('');
+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"/>'+
+    '<title>Sales Report - Pooja Pharmacy</title>'+
+    '<style>'+AN_REPORT_CSS+'<\/style><\/head><body>'+
+    '<div class="toolbar">'+
+      '<button class="primary" onclick="window.print()">&#128424;&#65039; Print / Save as PDF</button>'+
+      '<button onclick="window.close()">Close</button>'+
+    '</div>'+
+    '<div class="sheet">'+
+      '<div class="rep-header">'+
+        '<div class="rep-brand">POOJA PHARMACY</div>'+
+        '<div class="rep-sub">Sales Report</div>'+
+      '</div>'+
+      '<div class="rep-meta">'+
+        '<span><strong>Period:</strong> '+esc(periodLabel)+'</span>'+
+        '<span><strong>Generated:</strong> '+esc(generatedStr)+'</span>'+
+      '</div>'+
+      '<div class="rep-stats">'+
+        statBox('Total Selling', money(agg.revenue))+
+        statBox('Total Cost', money(agg.cost))+
+        statBox('Profit', (agg.profit>=0?'+':'')+money(agg.profit))+
+        statBox('Margin', agg.margin.toFixed(1)+'%')+
+        statBox('Units Sold', fmtQty(agg.qty))+
+        statBox('Transactions', agg.txns)+
+        statBox('Avg. Sale Value', money(agg.avgSale))+
+        statBox('Period', esc(periodLabel))+
+      '</div>'+
+      '<h3>Period Breakdown</h3>'+
+      '<table><thead><tr><th>Period</th><th class="num">Total Selling</th><th class="num">Cost</th><th class="num">Profit</th></tr></thead>'+
+      '<tbody>'+bucketRowsHtml+'</tbody></table>'+
+      '<h3>Top Selling Medicines</h3>'+
+      '<table><thead><tr><th>#</th><th>Medicine</th><th class="num">Qty Sold</th><th class="num">Total Selling</th><th class="num">% of Total Selling</th></tr></thead>'+
+      '<tbody>'+(topMedsHtml||'<tr><td colspan="5" style="text-align:center;color:#888;">No data</td></tr>')+'</tbody></table>'+
+      '<h3>Sales by Medicine Type</h3>'+
+      '<table><thead><tr><th>Type</th><th class="num">Total Selling</th><th class="num">% Share</th></tr></thead>'+
+      '<tbody>'+(typeRowsHtml||'<tr><td colspan="3" style="text-align:center;color:#888;">No data</td></tr>')+'</tbody></table>'+
+      '<div class="rep-footer">Generated by Pooja Pharmacy Management System &middot; poojapharmacy17@gmail.com</div>'+
+    '</div>'+
+  '<\/body><\/html>';
+
+  var w=window.open('','_blank');
+  if(!w){ RP.toast('Please allow pop-ups to view the report.','warn'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
+initAnalysisControls();
+
 /* ---- Edit ---- */
 var saleEditId=null;
 
@@ -1282,8 +2356,8 @@ function openSaleEdit(id){
     : s.qtyType+' | Sold as: '+(s.soldAs==='tablet'?'Individual Units':'Whole Unit')+
       (s.groupId?' | Part of a batch sale — editing this only changes this one item':'');
   document.getElementById('se-qty').value=s.qtySold;
-  document.getElementById('se-price').value=parseFloat(s.sellingPricePerUnit||0).toFixed(2);
-  document.getElementById('se-cost').value=parseFloat(s.costPricePerUnit||0).toFixed(2);
+  document.getElementById('se-price').value=+parseFloat(s.sellingPricePerUnit||0).toFixed(4);
+  document.getElementById('se-cost').value=+parseFloat(s.costPricePerUnit||0).toFixed(4);
   document.getElementById('se-date').value=s.date;
 
   // Extras have no quantity concept worth editing (always 1) — hide it to avoid confusion
@@ -1327,8 +2401,9 @@ function recalcSaleEdit(){
   document.getElementById('se-profit-row').classList.toggle('loss', profit<0);
 }
 
+var saleEditSaving=false;
 async function saveSaleEdit(){
-  if(!saleEditId) return;
+  if(!saleEditId||saleEditSaving) return;
   var s=RP_SALES.getById(saleEditId);
   if(!s) return;
   var isExtra=s.soldAs==='extra';
@@ -1371,7 +2446,11 @@ async function saveSaleEdit(){
     discountPct=grossRef>0?((grossRef-totalSelling)/grossRef*100):(parseFloat(s.discountPct)||0);
   }
 
+  saleEditSaving=true;
+  try {
   await RP_SALES.update(saleEditId, {
+    itemDiscountPct: isExtra?0:parseFloat(discountPct.toFixed(2)),
+    groupDiscountShare: 0,
     qtySold: qty,
     sellingPricePerUnit: price,
     costPricePerUnit: cost,
@@ -1382,6 +2461,11 @@ async function saveSaleEdit(){
     discountPct: parseFloat(discountPct.toFixed(2)),
     date: date
   });
+  } catch(err){
+    console.error('saveSaleEdit failed:',err);
+    RP.toast('Could not update the sale: '+(err&&err.message?err.message:err),'error');
+    return;
+  } finally { saleEditSaving=false; }
 
   closeSaleEdit();
   renderSalesTable();
@@ -1403,8 +2487,9 @@ function closeSaleDelModal(){
 }
 async function confirmSaleDelete(){
   if(!saleDeleteId) return;
-  await RP_SALES.delete(saleDeleteId);
-  closeSaleDelModal();
+  var delId=saleDeleteId;
+  closeSaleDelModal(); // close first so a double-click can't delete (and restore stock) twice
+  await RP_SALES.delete(delId);
   renderSalesTable();
   renderProfitSummary();
   renderHistory();
@@ -1436,10 +2521,10 @@ function downloadSalesCSV(){
   var rows=sales.map(function(s){
     return [
       s.date||'',
-      '"'+(s.groupId||s.id||'')+'"',
-      '"'+s.medicineName+'"',
+      csvCell(s.groupId||s.id||''),
+      csvCell(s.medicineName||''),
       s.qtySold,
-      '"'+s.qtyType+'"',
+      csvCell(s.qtyType||''),
       parseFloat(s.costPricePerUnit||0).toFixed(2),
       parseFloat(s.mrpPerUnit||0).toFixed(2),
       parseFloat(s.itemDiscountPct||0).toFixed(1),
@@ -1462,6 +2547,282 @@ function downloadSalesCSV(){
   document.body.removeChild(a);
   RP.toast('Sales CSV downloaded.','success');
 }
+/* ============================================================
+   CUSTOMER BILLS — Save Bill (from Record Sale) + Bills tab
+   Bills are saved separately from Sales (own RP_BILLS store /
+   'SaleBills' sheet) and carry the extra Customer Name field.
+============================================================ */
+var pendingBill=null;   // bill built from the sale that was just recorded
+var previewBillId=null; // bill currently open in the preview modal
+
+var RP_BILL_INFO={
+  licences:['RLF20AP2026006150','RLF21AP2026006133'],
+  mobiles:['8143811695','8332915695'],
+  name:'POOJA PHARMACY',
+  address:'11-1/5-10, Ground Floor, Yogimallavaram, Tiruchanoor'
+};
+
+function billDmy(d){
+  var s=String(d||'').slice(0,10), p=s.split('-');
+  return p.length===3 ? p[2]+'/'+p[1]+'/'+p[0] : s;
+}
+function billMoney(v){ return (parseFloat(v)||0).toFixed(2); }
+function billQtyText(it){
+  var q=String(Math.round((parseFloat(it.qty)||0)*100)/100);
+  var t=(it.qtyType && it.qtyType!=='Extra') ? String(it.qtyType) : '';
+  if(t && parseFloat(it.qty)===1) t=/^boxes$/i.test(t) ? 'Box' : t.replace(/s$/i,''); // 1 Strip, 2 Strips
+  return q+(t?' '+t:'');
+}
+
+/* ---- Save Bill button in the "Sale Recorded" popup ---- */
+async function saveBillFromSale(){
+  if(!pendingBill) return;
+  var btn=document.getElementById('sale-save-bill-btn');
+  if(btn.disabled) return;
+  btn.disabled=true; btn.textContent='Saving...';
+  try{
+    await RP_BILLS.add(pendingBill);
+    btn.textContent='Bill Saved \u2713';
+    pendingBill=null;
+    RP.toast('Bill saved — see the Bills tab.','success');
+    renderBillsTable();
+  }catch(err){
+    console.error('saveBillFromSale failed:',err);
+    btn.disabled=false; btn.textContent='Save Bill';
+    RP.toast('Could not save the bill: '+(err&&err.message?err.message:err),'error');
+  }
+}
+
+/* ---- Bills tab list ---- */
+function clearBillFilters(){
+  document.getElementById('bill-search-input').value='';
+  document.getElementById('bill-filter-from').value='';
+  document.getElementById('bill-filter-to').value='';
+  renderBillsTable();
+}
+
+function renderBillsTable(){
+  var wrap=document.getElementById('bills-table-wrap');
+  if(!wrap) return;
+  var q=(document.getElementById('bill-search-input').value||'').trim().toLowerCase();
+  var from=document.getElementById('bill-filter-from').value;
+  var to=document.getElementById('bill-filter-to').value;
+
+  var bills=[].concat(RP_BILLS.getAll()).reverse(); // most recent first
+  bills=bills.filter(function(b){
+    if(q){
+      var hit=(b.customerName||'').toLowerCase().indexOf(q)!==-1 ||
+        (b.items||[]).some(function(it){ return (it.name||'').toLowerCase().indexOf(q)!==-1; });
+      if(!hit) return false;
+    }
+    if(from && b.date < from) return false;
+    if(to && b.date > to) return false;
+    return true;
+  });
+
+  if(!bills.length){
+    wrap.innerHTML='<div class="empty-state"><div class="empty-icon" style="font-size:36px;">&#129534;</div><p>No bills saved yet. Record a sale and press <strong>Save Bill</strong>.</p></div>';
+    return;
+  }
+
+  wrap.innerHTML='<div>'+bills.map(function(b){
+    var items=(b.items||[]).map(function(it,i){
+      return '<div style="display:flex;justify-content:space-between;gap:12px;font-size:.8rem;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'+
+        '<span style="min-width:0;">'+(i+1)+'. '+esc(it.name)+' <span style="color:var(--muted);">&times; '+esc(billQtyText(it))+'</span></span>'+
+        '<span style="font-family:monospace;flex-shrink:0;">Rs.'+billMoney(it.total)+'</span></div>';
+    }).join('');
+    return '<div style="background:rgba(13,148,136,.07);border:1px solid rgba(13,148,136,.28);border-radius:12px;padding:14px 16px 8px;margin-bottom:12px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;">'+
+        '<div style="min-width:0;">'+
+          '<div style="font-weight:700;font-size:.95rem;">'+(b.customerName?esc(b.customerName):'<span style="color:var(--muted);font-weight:500;">No customer name</span>')+'</div>'+
+          '<div style="font-size:.74rem;color:var(--muted);margin-top:2px;">'+RP.fmtDate(b.date)+' | '+(b.items||[]).length+' line'+((b.items||[]).length!==1?'s':'')+'</div>'+
+        '</div>'+
+        '<div style="font-size:.85rem;">Grand Total: <strong style="font-family:monospace;">Rs.'+billMoney(b.grandTotal)+'</strong></div>'+
+        '<div style="display:flex;gap:6px;">'+
+          '<button class="btn btn-sm btn-secondary" onclick="previewBill(\''+b.id+'\')">Preview Bill</button>'+
+          '<button class="btn btn-sm btn-primary" onclick="downloadBill(\''+b.id+'\')">Download</button>'+
+        '</div>'+
+      '</div>'+items+
+    '</div>';
+  }).join('')+'</div>';
+}
+
+/* ---- Bill preview (HTML) — professional layout, mirrors the PDF ---- */
+function rpBillHtml(b){
+  var I=RP_BILL_INFO, T='#0f766e', D='#134e4a', A='#f59e0b';
+  var th='padding:9px 8px;font-size:11.5px;letter-spacing:.6px;text-transform:uppercase;color:#fff;background:'+T+';border:1px solid '+T+';';
+  var rows=(b.items||[]).map(function(it,i){
+    var bg=i%2 ? '#f4faf9' : '#ffffff';
+    var td='padding:9px 8px;font-size:13px;border:1px solid #cfe3df;background:'+bg+';';
+    return '<tr>'+
+      '<td style="'+td+'text-align:center;color:#6b7280;">'+(i+1)+'</td>'+
+      '<td style="'+td+'font-weight:600;">'+esc(it.name)+'</td>'+
+      '<td style="'+td+'text-align:center;white-space:nowrap;">'+esc(billQtyText(it))+'</td>'+
+      '<td style="'+td+'text-align:right;">'+billMoney(it.mrp)+'</td>'+
+      '<td style="'+td+'text-align:right;font-weight:700;">'+billMoney(it.total)+'</td></tr>';
+  }).join('');
+  var lbl='font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#6b7280;font-weight:700;';
+  return '<div style="background:#fff;color:#1f2937;font-family:Arial,Helvetica,sans-serif;border:2px solid '+T+';border-radius:8px;overflow:hidden;min-width:560px;">'+
+    /* header band */
+    '<div style="background:linear-gradient(135deg,'+D+','+T+');color:#fff;padding:14px 22px 18px;">'+
+      '<div style="display:flex;justify-content:space-between;gap:12px;font-size:11px;line-height:1.6;color:#d5f3ee;">'+
+        '<div>'+I.licences.map(function(l){ return 'Lic. No: '+l; }).join('<br>')+'</div>'+
+        '<div style="text-align:right;">'+I.mobiles.map(function(m){ return 'Mobile: '+m; }).join('<br>')+'</div>'+
+      '</div>'+
+      '<div style="text-align:center;margin-top:-6px;">'+
+        '<span style="display:inline-block;background:#fff;color:'+T+';font-weight:700;font-size:12px;letter-spacing:3px;padding:5px 20px;border-radius:20px;">CASH BILL</span>'+
+        '<div style="font-family:Georgia,\'Times New Roman\',serif;font-size:34px;font-weight:700;letter-spacing:2px;margin-top:10px;">'+I.name+'</div>'+
+        '<div style="font-size:12.5px;color:#d5f3ee;margin-top:3px;">'+I.address+'</div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="height:4px;background:'+A+';"></div>'+
+    /* body */
+    '<div style="padding:18px 22px 8px;">'+
+      '<div style="display:flex;justify-content:space-between;gap:16px;background:#f0fdfa;border:1px solid #99d6cf;border-radius:8px;padding:10px 16px;margin-bottom:16px;">'+
+        '<div><div style="'+lbl+'">Customer Name</div><div style="font-size:16px;font-weight:700;margin-top:2px;min-height:20px;">'+esc(b.customerName||'')+'</div></div>'+
+        '<div style="text-align:right;"><div style="'+lbl+'">Date</div><div style="font-size:16px;font-weight:700;margin-top:2px;">'+billDmy(b.date)+'</div></div>'+
+      '</div>'+
+      '<table style="width:100%;border-collapse:collapse;">'+
+        '<thead><tr>'+
+          '<th style="'+th+'width:52px;">SI.NO</th>'+
+          '<th style="'+th+'text-align:left;">Name of the Medicine</th>'+
+          '<th style="'+th+'width:96px;">Qty</th>'+
+          '<th style="'+th+'width:84px;text-align:right;">MRP</th>'+
+          '<th style="'+th+'width:96px;text-align:right;">Total</th>'+
+        '</tr></thead>'+
+        '<tbody>'+rows+'</tbody>'+
+        '<tfoot><tr>'+
+          '<td colspan="4" style="padding:11px 10px;text-align:right;font-weight:700;letter-spacing:1.5px;font-size:12.5px;background:'+D+';color:#fff;border:1px solid '+D+';">GRAND TOTAL</td>'+
+          '<td style="padding:11px 8px;text-align:right;font-weight:700;font-size:16px;background:'+D+';color:#fbbf24;border:1px solid '+D+';">Rs. '+billMoney(b.grandTotal)+'</td>'+
+        '</tr></tfoot>'+
+      '</table>'+
+    '</div>'+
+    /* footer */
+    '<div style="display:flex;align-items:center;margin:18px 22px 0;padding:14px 0 18px;border-top:1px solid #cfe3df;">'+
+      '<span style="flex:1;"></span>'+
+      '<span style="flex:2;text-align:center;font-style:italic;font-weight:700;color:'+T+';font-size:14px;">Thank You Visit Again</span>'+
+      '<span style="flex:1;text-align:right;font-family:Georgia,\'Times New Roman\',serif;font-weight:700;font-size:14px;color:'+D+';letter-spacing:1px;">'+I.name+'</span>'+
+    '</div>'+
+  '</div>';
+}
+
+function previewBill(id){
+  var b=RP_BILLS.getById(id);
+  if(!b){ RP.toast('Bill not found.','error'); return; }
+  previewBillId=id;
+  document.getElementById('bill-preview-body').innerHTML=rpBillHtml(b);
+  document.getElementById('bill-preview-modal').classList.add('open');
+}
+function closeBillPreview(){
+  document.getElementById('bill-preview-modal').classList.remove('open');
+  previewBillId=null;
+}
+
+/* ---- Bill PDF (jsPDF + autoTable) — professional layout, same as the preview ---- */
+function rpBuildBillPdf(JsPDF, b){
+  var I=RP_BILL_INFO;
+  var TEAL=[15,118,110], DARK=[19,78,74], AMBER=[245,158,11], SOFT=[240,253,250], ZEBRA=[244,250,249], LINE=[207,227,223];
+  var doc=new JsPDF({unit:'mm',format:'a4'});
+  var W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=15;
+
+  // Page frame (drawn on every page)
+  function frame(){
+    doc.setDrawColor(TEAL[0],TEAL[1],TEAL[2]); doc.setLineWidth(0.7);
+    doc.rect(8,8,W-16,H-16);
+    doc.setLineWidth(0.2); doc.rect(9.6,9.6,W-19.2,H-19.2);
+  }
+
+  // ---- Header band ----
+  doc.setFillColor(TEAL[0],TEAL[1],TEAL[2]); doc.rect(9.6,9.6,W-19.2,44,'F');
+  doc.setFillColor(AMBER[0],AMBER[1],AMBER[2]); doc.rect(9.6,53.6,W-19.2,1.6,'F');
+
+  doc.setTextColor(213,243,238); doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+  I.licences.forEach(function(l,i){ doc.text('Lic. No: '+l, M+2, 17+i*4.6); });
+  I.mobiles.forEach(function(m,i){ doc.text('Mobile: '+m, W-M-2, 17+i*4.6, {align:'right'}); });
+
+  // CASH BILL pill
+  doc.setFillColor(255,255,255); doc.roundedRect(W/2-20,19,40,8.5,4.2,4.2,'F');
+  doc.setTextColor(TEAL[0],TEAL[1],TEAL[2]); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('CASH BILL', W/2, 24.8, {align:'center', charSpace:0.8});
+
+  // Shop name + address
+  doc.setTextColor(255,255,255); doc.setFont('times','bold'); doc.setFontSize(29);
+  doc.text(I.name, W/2, 39.5, {align:'center'});
+  doc.setTextColor(213,243,238); doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+  doc.text(I.address, W/2, 47.5, {align:'center'});
+
+  // ---- Customer / date info box ----
+  doc.setFillColor(SOFT[0],SOFT[1],SOFT[2]); doc.setDrawColor(153,214,207); doc.setLineWidth(0.3);
+  doc.roundedRect(M,62,W-2*M,15,2,2,'FD');
+  doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(107,114,128);
+  doc.text('CUSTOMER NAME', M+4, 67, {charSpace:0.4});
+  doc.text('DATE', W-M-4, 67, {align:'right', charSpace:0.4});
+  doc.setFontSize(12.5); doc.setTextColor(31,41,55);
+  doc.text(String(b.customerName||''), M+4, 73.5);
+  doc.text(billDmy(b.date), W-M-4, 73.5, {align:'right'});
+
+  // ---- Items table ----
+  var body=(b.items||[]).map(function(it,i){
+    return [String(i+1), String(it.name||''), billQtyText(it), billMoney(it.mrp), billMoney(it.total)];
+  });
+  doc.autoTable({
+    startY:83, margin:{top:16,bottom:22,left:M,right:M},
+    head:[['SI.NO','Name of the Medicine','Qty','MRP','Total']],
+    body:body,
+    foot:[[{content:'GRAND TOTAL',colSpan:4,styles:{halign:'right'}}, 'Rs. '+billMoney(b.grandTotal)]],
+    showFoot:'lastPage',
+    theme:'grid',
+    styles:{font:'helvetica',fontSize:10.5,textColor:[31,41,55],lineColor:LINE,lineWidth:0.25,cellPadding:{top:3,bottom:3,left:2.6,right:2.6}},
+    headStyles:{fillColor:TEAL,textColor:255,fontStyle:'bold',fontSize:9.5,lineColor:TEAL},
+    alternateRowStyles:{fillColor:ZEBRA},
+    footStyles:{fillColor:DARK,textColor:255,fontStyle:'bold',fontSize:11,lineColor:DARK},
+    columnStyles:{
+      0:{cellWidth:16,halign:'center',textColor:[107,114,128]},
+      1:{cellWidth:'auto',halign:'left',fontStyle:'bold'},
+      2:{cellWidth:30,halign:'center'},
+      3:{cellWidth:26,halign:'right'},
+      4:{cellWidth:32,halign:'right',fontStyle:'bold'}
+    },
+    // columnStyles only reach the body, so align header / grand-total cells here
+    didParseCell:function(d){
+      if(d.section==='head') d.cell.styles.halign=['center','left','center','right','right'][d.column.index];
+      if(d.section==='foot'){
+        d.cell.styles.halign='right';
+        if(d.column.index===4){ d.cell.styles.textColor=[251,191,36]; d.cell.styles.fontSize=12.5; }
+      }
+    },
+    didDrawPage:function(){ frame(); }
+  });
+
+  // ---- Footer: Thank You (center) + shop name (right corner) ----
+  var y=Math.max(doc.lastAutoTable.finalY+18, H-28);
+  if(y>H-14){ doc.addPage(); frame(); y=H-28; }
+  doc.setDrawColor(LINE[0],LINE[1],LINE[2]); doc.setLineWidth(0.3);
+  doc.line(M, y-7, W-M, y-7);
+  doc.setFont('helvetica','bolditalic'); doc.setFontSize(12); doc.setTextColor(TEAL[0],TEAL[1],TEAL[2]);
+  doc.text('Thank You Visit Again', W/2, y, {align:'center'});
+  doc.setFont('times','bold'); doc.setFontSize(12.5); doc.setTextColor(DARK[0],DARK[1],DARK[2]);
+  doc.text(I.name, W-M, y, {align:'right'});
+  return doc;
+}
+
+function downloadBill(id){
+  var b=RP_BILLS.getById(id || previewBillId);
+  if(!b){ RP.toast('Bill not found.','error'); return; }
+  if(!window.jspdf || !window.jspdf.jsPDF){
+    RP.toast('PDF library could not load — check your internet connection and reload.','error'); return;
+  }
+  try{
+    var doc=rpBuildBillPdf(window.jspdf.jsPDF, b);
+    var who=String(b.customerName||'Bill').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||'Bill';
+    doc.save('Bill_'+who+'_'+String(b.date||'').slice(0,10)+'.pdf');
+    RP.toast('Bill PDF downloaded.','success');
+  }catch(err){
+    console.error('downloadBill failed:',err);
+    RP.toast('Could not create the PDF: '+(err&&err.message?err.message:err),'error');
+  }
+}
+
 </script>
 </body>
 </html>

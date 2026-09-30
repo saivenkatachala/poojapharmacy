@@ -1,7 +1,7 @@
 const RP = {
 
   // ---- IMPORTANT: Replace with your deployed Apps Script URL ----
-      SHEET_URL: 'https://script.google.com/macros/s/AKfycbzBPC4jFQDTp0s-0HxdQ_Hl5h1UWYeMj8vPaaytkXfXB46gcQriYKw9qtPvKsH3RrT7kA/exec',
+      SHEET_URL: 'https://script.google.com/macros/s/AKfycbyCRVRce7diJ_faxrj8o-AWCI7efJPRaW2mTEv5wL1eyGpvshUeC-qpCCd4aJda96Ms/exec',
 
   OWNER_EMAIL: 'saivenkatachala@gmail.com',
 
@@ -96,6 +96,7 @@ const RP = {
         if(Array.isArray(data.stock))  this._setCached(this._KEY_STOCK, data.stock);
         if(Array.isArray(data.bills))  this._setCached(this._KEY_BILLS, data.bills);
         if(Array.isArray(data.sales))  { try{ localStorage.setItem('rp_sales_cache', JSON.stringify(data.sales)); }catch(e){} }
+        if(Array.isArray(data.saleBills)) { try{ localStorage.setItem('rp_salebills_cache', JSON.stringify(data.saleBills)); }catch(e){} }
         localStorage.setItem(this._KEY_SYNC_TS, new Date().toISOString());
         console.info('[RP] Synced from Sheet —', (data.stock||[]).length, 'stock items,', (data.bills||[]).length, 'bills.');
         return { ok: true, stock: data.stock, bills: data.bills };
@@ -562,5 +563,37 @@ const RP_SALES = {
       return y+'-'+m+'-'+d;
     }
     return '';
+  }
+};
+
+
+// ============================================================
+// SALE BILLS  (Stock Sale → "Save Bill" / Bills tab)
+// ============================================================
+// Customer-facing cash bills created from a recorded sale. Kept in their
+// own store / 'SaleBills' sheet (separate from Sales, and from the older
+// Bill Generation 'Bills' sheet). Each bill = { id, groupId, customerName,
+// date, grandTotal, items:[{name, qtyType, qty, mrp, total}] }.
+const RP_BILLS = {
+  _KEY: 'rp_salebills_cache',
+  _get(){ try{ return JSON.parse(localStorage.getItem(this._KEY)||'[]'); }catch{ return []; } },
+  _set(arr){ try{ localStorage.setItem(this._KEY, JSON.stringify(arr)); }catch(e){} },
+
+  getAll(){ return this._get(); },
+  getById(id){ return this._get().find(b => b.id === id) || null; },
+
+  async add(bill){
+    // One bill per sale (groupId) — saving twice returns the existing one
+    const existing = bill.groupId && this._get().find(b => b.groupId === bill.groupId);
+    if(existing) return existing;
+
+    bill.id        = bill.id || RP.uid();
+    bill.createdOn = bill.createdOn || new Date().toISOString();
+    bill.date      = (bill.date && bill.date.length >= 10) ? bill.date.slice(0,10) : RP.localDateStr();
+    const bills = this._get();
+    bills.push(bill);
+    this._set(bills);
+    await RP.postToSheet({ action: 'addSaleBill', data: bill });
+    return bill;
   }
 };
