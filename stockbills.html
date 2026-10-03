@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Stock Bills — Pooja Pharmacy</title>
+<link rel="icon" href="pp.png">
+<link rel="stylesheet" href="rp-styles.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script>
+  // Fallback: if the cdnjs copy of Chart.js failed to load, try a second CDN.
+  if(typeof Chart==='undefined'){
+    document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"><\/script>');
+  }
+</script>
+<style>
+  /* ---- Tabs (same look as Stock Sale) ---- */
+  .tab-switcher{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;max-width:760px;}
+  .tab-btn{
+    flex:1;padding:11px 16px;background:var(--surface2);border:none;cursor:pointer;
+    font-family:'DM Sans',sans-serif;font-weight:600;font-size:.88rem;color:var(--muted);
+  }
+  .tab-btn.active{background:var(--accent);color:#fff;}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+
+  /* ---- Summary cards ---- */
+  .sb-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
+  .sb-stat-grid.three{grid-template-columns:repeat(3,1fr);}
+  @media(max-width:900px){.sb-stat-grid,.sb-stat-grid.three{grid-template-columns:repeat(2,1fr);}}
+  .sb-stat{
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:14px 16px;display:flex;flex-direction:column;gap:4px;
+  }
+  .sb-stat .l{font-size:.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+  .sb-stat .v{font-family:'Playfair Display',serif;font-size:1.4rem;font-weight:700;}
+  .sb-stat .s{font-size:.72rem;color:var(--muted);}
+  .sb-stat.alert{border-color:rgba(255,77,109,.45);background:rgba(255,77,109,.06);}
+
+  /* ---- Add form layout ---- */
+  .sb-layout{display:grid;grid-template-columns:1.2fr 1fr;gap:20px;}
+  @media(max-width:960px){.sb-layout{grid-template-columns:1fr;}}
+  .sb-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media(max-width:560px){.sb-form-grid{grid-template-columns:1fr;}}
+  .sb-form-grid .full{grid-column:1/-1;}
+  .sb-input{
+    width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);font-family:'DM Sans',sans-serif;padding:10px 12px;font-size:.9rem;
+  }
+  .sb-input:focus{outline:none;border-color:var(--accent);}
+
+  /* ---- Live status box ---- */
+  .sb-status{
+    border-radius:12px;padding:12px 16px;margin-top:16px;font-size:.9rem;font-weight:600;
+    border:1px solid var(--border);background:var(--surface2);color:var(--muted);
+  }
+  .sb-status.pending{background:rgba(255,77,109,.1);border-color:rgba(255,77,109,.45);color:var(--danger);}
+  .sb-status.paid{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.4);color:var(--success);}
+  .sb-status.invalid{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.45);color:var(--warn,#f59e0b);}
+  .sb-status .sub{display:block;font-weight:500;font-size:.78rem;margin-top:3px;opacity:.85;}
+
+  /* ---- Due list (right panel) ---- */
+  .due-item{
+    border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:9px;
+    display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+    background:var(--surface2);border-left:4px solid var(--danger);
+  }
+  .due-item.soon{border-left-color:#f59e0b;}
+  .due-item .nm{font-weight:600;font-size:.86rem;}
+  .due-item .mt{font-size:.72rem;color:var(--muted);margin-top:2px;}
+  .due-item .amt{font-family:monospace;font-weight:700;color:var(--danger);font-size:.88rem;text-align:right;}
+
+  /* ---- View tab ---- */
+  .sb-chip-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .sb-chip{
+    padding:7px 15px;border-radius:18px;border:1px solid var(--border);background:var(--surface2);
+    color:var(--muted);cursor:pointer;font-size:.8rem;font-weight:700;font-family:'DM Sans',sans-serif;transition:.2s;
+  }
+  .sb-chip:hover{border-color:var(--accent);color:var(--accent);}
+  .sb-chip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .sb-chip.unpaid.active{background:var(--danger);border-color:var(--danger);}
+  .sb-chip.paid.active{background:var(--success);border-color:var(--success);}
+  .sb-filter-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  .sb-select,.sb-date{
+    background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);
+    padding:8px 10px;font-family:'DM Sans',sans-serif;font-size:.83rem;
+  }
+  table.sb-table{width:100%;border-collapse:collapse;font-size:.86rem;}
+  .sb-table th{
+    text-align:left;padding:10px 12px;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;
+  }
+  .sb-table td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  .sb-table .num{text-align:right;font-family:'JetBrains Mono',monospace;white-space:nowrap;}
+  .sb-table tr.row-unpaid td:first-child{border-left:4px solid var(--danger);}
+  .sb-table tr.row-unpaid{background:rgba(255,77,109,.04);}
+  .sb-table tr.row-paid td:first-child{border-left:4px solid var(--success);}
+  .sb-table tfoot td{font-weight:700;border-top:2px solid var(--border);border-bottom:none;}
+  .sb-pill{
+    display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:14px;
+    font-size:.74rem;font-weight:700;white-space:nowrap;
+  }
+  .sb-pill.red{background:rgba(255,77,109,.13);color:var(--danger);}
+  .sb-pill.green{background:rgba(34,197,94,.13);color:var(--success);}
+  .sb-sub{font-size:.7rem;color:var(--muted);margin-top:3px;}
+  .sb-sub.bad{color:var(--danger);font-weight:700;}
+  .sb-sub.soon{color:#f59e0b;font-weight:700;}
+  .sb-actions{display:flex;gap:6px;justify-content:flex-end;}
+  .table-scroll{overflow-x:auto;}
+
+  /* ---- Analysis tab (mirrors Stock Sale analysis) ---- */
+  .an-cat-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+  .an-cat-chip{
+    padding:9px 18px;border-radius:20px;border:1px solid var(--border);
+    background:var(--surface2);color:var(--text2,var(--muted));cursor:pointer;
+    font-size:.85rem;font-weight:600;font-family:'DM Sans',sans-serif;transition:.2s;
+  }
+  .an-cat-chip:hover{border-color:var(--accent);color:var(--accent);}
+  .an-cat-chip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .an-subcontrol{display:none;gap:10px;flex-wrap:wrap;align-items:center;}
+  .an-subcontrol.active{display:flex;}
+  .an-input{
+    background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+    color:var(--text);padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:.85rem;
+  }
+  .an-nav-btn{
+    width:34px;height:34px;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface2);color:var(--text);cursor:pointer;font-size:.9rem;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .an-nav-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .an-range-label{font-size:.8rem;color:var(--muted);font-weight:600;}
+  .an-charts-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-top:4px;}
+  @media(max-width:960px){.an-charts-grid{grid-template-columns:1fr;}}
+  .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;}
+  .chart-card-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+  .chart-card-title{font-weight:700;font-size:.92rem;}
+  .chart-toggle-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .chart-toggle-btn{
+    padding:5px 12px;border-radius:14px;border:1px solid var(--border);
+    background:var(--surface2);color:var(--muted);cursor:pointer;
+    font-size:.72rem;font-weight:700;font-family:'DM Sans',sans-serif;
+  }
+  .chart-toggle-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .chart-canvas-wrap{position:relative;height:300px;}
+  .chart-canvas-wrap.chart-tall{height:340px;}
+  .chart-empty-overlay{
+    position:absolute;inset:0;display:none;flex-direction:column;
+    align-items:center;justify-content:center;gap:6px;color:var(--muted);text-align:center;
+  }
+  .chart-empty-overlay.show{display:flex;}
+  .chart-empty-overlay .ceo-icon{font-size:30px;}
+  .chart-full-row{grid-column:1/-1;}
+  .sb-note{font-size:.78rem;color:var(--muted);margin:-4px 0 12px;}
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a href="dashboard.html" class="navbar-brand">
+    <div class="brand-icon">&#128138;</div><span>Pooja Pharmacy</span>
+  </a>
+  <div class="navbar-nav">
+    <a href="dashboard.html" class="nav-link">&#127968; <span class="nav-text">Home</span></a>
+    <a href="add-stock.html" class="nav-link">&#10133; <span class="nav-text">Add Stock</span></a>
+    <a href="stock-sale.html" class="nav-link">&#128200; <span class="nav-text">Stock Sale</span></a>
+    <a href="view-stock.html" class="nav-link">&#128230; <span class="nav-text">View Stock</span></a>
+    <a href="billing.html" class="nav-link">&#128451; <span class="nav-text">Bill Generation</span></a>
+    <a href="stockbills.html" class="nav-link active">&#128179; <span class="nav-text">Stock Bills</span></a>
+    <a href="alerts.html" class="nav-link">&#128276; <span class="nav-text">Alerts</span>
+      <span class="badge" id="alert-badge" style="display:none">0</span></a>
+  </div>
+  <div class="navbar-right">
+    <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">&#127769;</button>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<!-- SAVED POPUP -->
+<div class="popup-overlay" id="sb-success-popup">
+  <div class="popup-box">
+    <div class="popup-icon">&#10003;</div>
+    <div class="popup-title">Bill Saved!</div>
+    <div class="popup-msg" id="sb-success-msg"></div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="closeSbSuccess()">OK</button>
+      <button class="btn btn-secondary" onclick="closeSbSuccess();switchSbTab('view')">View Bills</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT BILL MODAL -->
+<div class="modal-overlay" id="sb-edit-modal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <h3>Edit Stock Bill</h3>
+      <span class="modal-close" onclick="closeSbEdit()">&#10005;</span>
+    </div>
+    <div style="padding:4px 0;">
+      <div class="sb-form-grid">
+        <div class="field full">
+          <label>Agency Name</label>
+          <input class="sb-input" id="se-agency" list="sb-agency-list" oninput="updateEditStatus()"/>
+        </div>
+        <div class="field">
+          <label>Bill Number</label>
+          <input class="sb-input" id="se-billno"/>
+        </div>
+        <div class="field">
+          <label>Bill Date (order placed)</label>
+          <input class="sb-input" type="date" id="se-date"/>
+        </div>
+        <div class="field">
+          <label>Due Date <span class="hint">optional</span></label>
+          <input class="sb-input" type="date" id="se-due"/>
+        </div>
+        <div class="field">
+          <label>Amount in Bill (Rs.)</label>
+          <input class="sb-input" type="number" id="se-amount" min="0" step="any" oninput="updateEditStatus()"/>
+        </div>
+        <div class="field full">
+          <label>Amount Paid So Far (Rs.)
+            <span class="hint">type the new TOTAL paid — it replaces the old value (e.g. 1200 &rarr; 2000)</span>
+          </label>
+          <div style="display:flex;gap:8px;">
+            <input class="sb-input" type="number" id="se-paid" min="0" step="any" oninput="updateEditStatus()"/>
+            <button class="btn btn-sm btn-secondary" style="white-space:nowrap;" onclick="markFullyPaid()">Mark fully paid</button>
+          </div>
+        </div>
+        <div class="field full">
+          <label>Payment Date <span class="hint">the day you paid the extra amount (only used if the paid total goes up)</span></label>
+          <input class="sb-input" type="date" id="se-paydate"/>
+          <div class="sb-sub" id="se-history" style="margin-top:8px;"></div>
+        </div>
+      </div>
+      <div class="sb-status" id="se-status"></div>
+      <div class="flex-end" style="margin-top:20px;">
+        <button class="btn btn-secondary" onclick="closeSbEdit()">Cancel</button>
+        <button class="btn btn-primary" id="se-save-btn" onclick="saveSbEdit()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE MODAL -->
+<div class="modal-overlay" id="sb-del-modal">
+  <div class="modal" style="max-width:380px;text-align:center;">
+    <div style="font-size:40px;margin-bottom:12px;">&#128465;</div>
+    <h3>Delete this bill?</h3>
+    <p style="color:var(--muted);margin:12px 0 24px;" id="sb-del-text">
+      This removes the bill record only. Your stock and sales are not changed. This cannot be undone.
+    </p>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-secondary" onclick="closeSbDel()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmSbDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<datalist id="sb-agency-list"></datalist>
+
+<div class="page">
+<div class="container">
+
+  <div class="page-header">
+    <h1>Stock Bills</h1>
+    <p>Track the bills from your agencies — what you owe, what you've paid, and how it compares with what you sell.</p>
+  </div>
+
+  <div id="sb-sync-banner"></div>
+
+  <div class="tab-switcher">
+    <button class="tab-btn active" onclick="switchSbTab('add')">Add Bills</button>
+    <button class="tab-btn" onclick="switchSbTab('view')">View &amp; Edit Bills</button>
+    <button class="tab-btn" onclick="switchSbTab('analysis')">Analysis</button>
+  </div>
+
+  <!-- ================= TAB 1 : ADD BILLS ================= -->
+  <div class="tab-panel active" id="tab-add">
+
+    <div class="sb-stat-grid" id="sb-top-stats"></div>
+
+    <div class="sb-layout">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Add a Stock Bill</span></div>
+        <div class="card-body">
+          <div class="sb-form-grid">
+            <div class="field full">
+              <label>Agency Name</label>
+              <input class="sb-input" id="sb-agency" list="sb-agency-list" placeholder="e.g. Sri Sai Medical Agencies" autocomplete="off"/>
+            </div>
+            <div class="field">
+              <label>Bill Number</label>
+              <input class="sb-input" id="sb-billno" placeholder="e.g. INV-2041" autocomplete="off"/>
+            </div>
+            <div class="field">
+              <label>Bill Date (order placed)</label>
+              <input class="sb-input" type="date" id="sb-date"/>
+            </div>
+            <div class="field">
+              <label>Due Date <span class="hint">optional</span></label>
+              <input class="sb-input" type="date" id="sb-due"/>
+            </div>
+            <div class="field">
+              <label>Amount in Bill (Rs.)</label>
+              <input class="sb-input" type="number" id="sb-amount" min="0" step="any" placeholder="0.00" oninput="updateAddStatus()"/>
+            </div>
+            <div class="field">
+              <label>Amount Paid (Rs.) <span class="hint">0 if nothing paid yet</span></label>
+              <input class="sb-input" type="number" id="sb-paid" min="0" step="any" placeholder="0.00" oninput="updateAddStatus()"/>
+            </div>
+            <div class="field">
+              <label>Paid On <span class="hint">date you paid this amount</span></label>
+              <input class="sb-input" type="date" id="sb-paydate"/>
+            </div>
+          </div>
+
+          <div class="sb-status" id="sb-add-status">Enter the bill amount to see the payment status.</div>
+
+          <div class="flex-end" style="margin-top:18px;">
+            <button class="btn btn-secondary" onclick="resetAddForm()">Reset</button>
+            <button class="btn btn-primary" id="sb-save-btn" onclick="submitBill()">Save Bill</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="align-self:start;">
+        <div class="card-header">
+          <span class="card-title">Pending Payments</span>
+          <span id="sb-due-count" style="color:var(--muted);font-size:.8rem;"></span>
+        </div>
+        <div class="card-body" id="sb-due-list" style="max-height:520px;overflow-y:auto;"></div>
+      </div>
+    </div>
+  </div><!-- /tab-add -->
+
+  <!-- ================= TAB 2 : VIEW & EDIT ================= -->
+  <div class="tab-panel" id="tab-view">
+    <div class="sb-stat-grid" id="sb-view-stats"></div>
+
+    <div class="card">
+      <div class="card-header" style="flex-direction:column;align-items:stretch;gap:14px;padding-bottom:16px;">
+        <div class="sb-chip-row" id="sb-status-chips">
+          <button class="sb-chip active" data-val="all" onclick="setStatusFilter('all',this)">All <span id="cnt-all"></span></button>
+          <button class="sb-chip unpaid" data-val="unpaid" onclick="setStatusFilter('unpaid',this)">Unpaid <span id="cnt-unpaid"></span></button>
+          <button class="sb-chip paid" data-val="paid" onclick="setStatusFilter('paid',this)">Paid <span id="cnt-paid"></span></button>
+        </div>
+        <div class="sb-filter-bar">
+          <div class="toolbar" style="margin:0;flex:1;min-width:200px;">
+            <div class="search-box">
+              <span class="search-icon">&#128269;</span>
+              <input type="text" id="sb-search" placeholder="Search agency or bill number..." oninput="renderBillsTable()"/>
+            </div>
+          </div>
+          <select class="sb-select" id="sb-agency-filter" onchange="renderBillsTable()"></select>
+          <select class="sb-select" id="sb-sort" onchange="renderBillsTable()">
+            <option value="bill_desc">Bill date: newest &rarr; oldest</option>
+            <option value="bill_asc">Bill date: oldest &rarr; newest</option>
+            <option value="due_asc">Due date: soonest first</option>
+            <option value="due_desc">Due date: latest first</option>
+            <option value="pending_desc">Pending amount: high &rarr; low</option>
+          </select>
+          <input class="sb-date" type="date" id="sb-from" onchange="renderBillsTable()" title="Bill date from"/>
+          <input class="sb-date" type="date" id="sb-to" onchange="renderBillsTable()" title="Bill date to"/>
+          <button class="btn btn-sm btn-secondary" onclick="clearBillFilters()">Clear</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="table-scroll" id="sb-table-wrap"></div>
+      </div>
+    </div>
+  </div><!-- /tab-view -->
+
+  <!-- ================= TAB 3 : ANALYSIS ================= -->
+  <div class="tab-panel" id="tab-analysis">
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header"><span class="card-title">Choose Period</span></div>
+      <div class="card-body">
+        <div class="an-cat-row">
+          <button class="an-cat-chip active" data-cat="since" onclick="switchAnCategory('since',this)">From Month Onwards</button>
+          <button class="an-cat-chip" data-cat="all" onclick="switchAnCategory('all',this)">All Time</button>
+          <button class="an-cat-chip" data-cat="month" onclick="switchAnCategory('month',this)">Monthly</button>
+          <button class="an-cat-chip" data-cat="year" onclick="switchAnCategory('year',this)">Yearly</button>
+          <button class="an-cat-chip" data-cat="range" onclick="switchAnCategory('range',this)">Custom Range</button>
+        </div>
+
+        <div class="an-subcontrol active" id="an-sub-since">
+          <span class="an-range-label">Start from</span>
+          <input type="month" id="an-since" class="an-input" onchange="onSinceChange()"/>
+          <span class="an-range-label" id="an-since-range"></span>
+        </div>
+        <div class="an-subcontrol" id="an-sub-all">
+          <span class="an-range-label">Everything you have sold and every bill recorded so far.</span>
+        </div>
+        <div class="an-subcontrol" id="an-sub-month">
+          <button class="an-nav-btn" onclick="shiftAnMonth(-1)" title="Previous month">&#8249;</button>
+          <input type="month" id="an-month" class="an-input" onchange="renderAnalysis()"/>
+          <button class="an-nav-btn" onclick="shiftAnMonth(1)" title="Next month">&#8250;</button>
+        </div>
+        <div class="an-subcontrol" id="an-sub-year">
+          <span class="an-range-label">Year</span>
+          <select id="an-year" class="an-input" onchange="renderAnalysis()"></select>
+        </div>
+        <div class="an-subcontrol" id="an-sub-range">
+          <span class="an-range-label">From</span>
+          <input type="date" id="an-from" class="an-input" onchange="renderAnalysis()"/>
+          <span class="an-range-label">To</span>
+          <input type="date" id="an-to" class="an-input" onchange="renderAnalysis()"/>
+        </div>
+      </div>
+    </div>
+
+    <p class="sb-note">
+      <b>Total Selling</b> is read from your Stock Sale records (nothing there is changed). <b>Bills Paid</b> is the money you paid to agencies.
+      <b>Final Profit = Total Selling &minus; Bills Paid.</b>
+    </p>
+    <div class="chart-toggle-row" style="margin-bottom:14px;">
+      <span class="an-range-label" style="margin-right:2px;">Count bills paid by:</span>
+      <button class="chart-toggle-btn active" data-val="paydate" onclick="setPaidBasis('paydate',this)">Payment date</button>
+      <button class="chart-toggle-btn" data-val="billdate" onclick="setPaidBasis('billdate',this)">Bill date</button>
+    </div>
+    <p class="sb-note" id="an-basis-note" style="margin-top:-6px;"></p>
+
+    <div class="sb-stat-grid three" id="an-stat-grid"></div>
+
+    <div class="an-charts-grid">
+
+      <div class="chart-card">
+        <div class="chart-card-header"><span class="chart-card-title">Selling vs Bills Paid vs Final Profit</span></div>
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+          <div class="chart-toggle-row">
+            <span class="an-range-label" style="margin-right:2px;">Show:</span>
+            <button class="chart-toggle-btn active" data-val="all" onclick="setTrendField('all',this)">All</button>
+            <button class="chart-toggle-btn" data-val="sell" onclick="setTrendField('sell',this)">Selling</button>
+            <button class="chart-toggle-btn" data-val="paid" onclick="setTrendField('paid',this)">Bills Paid</button>
+            <button class="chart-toggle-btn" data-val="net" onclick="setTrendField('net',this)">Final Profit</button>
+          </div>
+          <div class="chart-toggle-row">
+            <button class="chart-toggle-btn active" data-val="bar" onclick="setTrendType('bar',this)">Bar</button>
+            <button class="chart-toggle-btn" data-val="line" onclick="setTrendType('line',this)">Line</button>
+            <button class="chart-toggle-btn" data-val="area" onclick="setTrendType('area',this)">Area</button>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap chart-tall">
+          <canvas id="ch-trend"></canvas>
+          <div class="chart-empty-overlay" id="em-trend"><div class="ceo-icon">&#128200;</div><p>No data in this period.</p></div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-card-header"><span class="chart-card-title">Paid vs Pending</span></div>
+        <div class="chart-canvas-wrap chart-tall">
+          <canvas id="ch-status"></canvas>
+          <div class="chart-empty-overlay" id="em-status"><div class="ceo-icon">&#128179;</div><p>No bills in this period.</p></div>
+        </div>
+      </div>
+
+      <div class="chart-card chart-full-row">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Where Your Money Goes</span>
+        </div>
+        <p class="sb-note">From everything you sold, how much went to agency bills and how much is left with you.</p>
+        <div class="chart-canvas-wrap" style="height:280px;">
+          <canvas id="ch-flow"></canvas>
+          <div class="chart-empty-overlay" id="em-flow"><div class="ceo-icon">&#128176;</div><p>No data in this period.</p></div>
+        </div>
+      </div>
+
+      <div class="chart-card chart-full-row">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Running Totals — Earned vs Paid Out</span>
+        </div>
+        <p class="sb-note">Cumulative Total Selling against cumulative Bills Paid. When the green area is above the amber line you're ahead.</p>
+        <div class="chart-canvas-wrap" style="height:320px;">
+          <canvas id="ch-cum"></canvas>
+          <div class="chart-empty-overlay" id="em-cum"><div class="ceo-icon">&#128200;</div><p>No data in this period.</p></div>
+        </div>
+      </div>
+
+      <div class="chart-card chart-full-row">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Bills by Agency</span>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+            <div class="chart-toggle-row">
+              <span class="an-range-label" style="margin-right:2px;">Metric:</span>
+              <button class="chart-toggle-btn active" data-val="billed" onclick="setAgMetric('billed',this)">Billed</button>
+              <button class="chart-toggle-btn" data-val="paid" onclick="setAgMetric('paid',this)">Paid</button>
+              <button class="chart-toggle-btn" data-val="pending" onclick="setAgMetric('pending',this)">Pending</button>
+            </div>
+            <div class="chart-toggle-row">
+              <button class="chart-toggle-btn active" data-val="bar" onclick="setAgType('bar',this)">Bar</button>
+              <button class="chart-toggle-btn" data-val="pie" onclick="setAgType('pie',this)">Pie</button>
+              <button class="chart-toggle-btn" data-val="doughnut" onclick="setAgType('doughnut',this)">Doughnut</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap" style="height:360px;">
+          <canvas id="ch-agency"></canvas>
+          <div class="chart-empty-overlay" id="em-agency"><div class="ceo-icon">&#127970;</div><p>No bills in this period.</p></div>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- /tab-analysis -->
+
+</div>
+</div>
+
+<script src="rp-core.js"></script>
+<script>
+RP.guard();
+RP.applyTheme();
+
+/* =========================================================
+   BASIC HELPERS
+   ========================================================= */
+function localDateStr(d){
+  var dt=d?new Date(d):new Date();
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+function logout(){ sessionStorage.removeItem('rp_auth'); window.location.href='index.html'; }
+function toggleTheme(){
+  var t=RP.getTheme()==='dark'?'light':'dark';
+  RP.setTheme(t);
+  document.getElementById('theme-btn').innerHTML=t==='dark'?'&#127769;':'&#9728;';
+  if(document.getElementById('tab-analysis').classList.contains('active')) renderAnalysis();
+}
+document.getElementById('theme-btn').innerHTML=RP.getTheme()==='dark'?'&#127769;':'&#9728;';
+
+function updateBadge(){
+  var a=RP.computeAlerts(), b=document.getElementById('alert-badge');
+  b.style.display=a.length?'inline-block':'none'; b.textContent=a.length;
+}
+updateBadge();
+
+function esc(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function money(v){
+  return 'Rs. '+(parseFloat(v)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function r2(v){ return Math.round((parseFloat(v)||0)*100)/100; }
+function daysBetween(a,b){ // whole days from date string a to b (b - a)
+  return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000);
+}
+function addDays(dateStr,n){ var d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n); return localDateStr(d); }
+function monthLabel(ym){
+  return new Date(parseInt(ym.slice(0,4),10),parseInt(ym.slice(5,7),10)-1,1).toLocaleDateString('en-IN',{month:'short',year:'numeric'});
+}
+function addMonths(ym,n){
+  var y=parseInt(ym.slice(0,4),10), m=parseInt(ym.slice(5,7),10)-1+n;
+  y+=Math.floor(m/12); m=((m%12)+12)%12;
+  return y+'-'+String(m+1).padStart(2,'0');
+}
+function daysInMonth(ym){ return new Date(parseInt(ym.slice(0,4),10),parseInt(ym.slice(5,7),10),0).getDate(); }
+
+function allBills(){ return RP_STOCKBILLS.getAll(); }
+
+/* Every payment on a bill as [{date, amount}], always adding up to amountPaid.
+   Older bills (no payment list) count as one payment on the bill date. */
+function paymentsOf(b){
+  var list=(Array.isArray(b.payments)?b.payments:[]).map(function(p){
+    return {date:String(p.date||'').slice(0,10),amount:r2(p.amount)};
+  }).filter(function(p){return p.amount>0;});
+  var total=0; list.forEach(function(p){total+=p.amount;}); total=r2(total);
+  var diff=r2(r2(b.amountPaid)-total);
+  if(diff>0){
+    list.push({date:list.length?(b.updatedOn||b.billDate||''):(b.billDate||''),amount:diff});
+  } else if(diff<0){
+    var rem=-diff;
+    for(var i=list.length-1;i>=0&&rem>0;i--){
+      var take=Math.min(list[i].amount,rem);
+      list[i].amount=r2(list[i].amount-take); rem=r2(rem-take);
+    }
+    list=list.filter(function(p){return p.amount>0;});
+  }
+  return list;
+}
+function lastPayDate(b){
+  var d=''; paymentsOf(b).forEach(function(p){ if(p.date>d) d=p.date; });
+  return d;
+}
+function pendingOf(b){ return RP_STOCKBILLS.pending(b); }
+function paidOf(b){ return RP_STOCKBILLS.isPaid(b); }
+
+/* A pending bill is "overdue" once today is past its due date. */
+function dueInfo(b){
+  if(paidOf(b) || !b.dueDate) return {cls:'',text:''};
+  var diff=daysBetween(localDateStr(), b.dueDate); // >0 = days left, <0 = overdue
+  if(diff<0)  return {cls:'bad', text:'Overdue by '+(-diff)+' day'+(-diff===1?'':'s'), overdue:true};
+  if(diff===0)return {cls:'soon',text:'Due today'};
+  if(diff<=3) return {cls:'soon',text:'Due in '+diff+' day'+(diff===1?'':'s')};
+  return {cls:'',text:''};
+}
+
+/* Live payment-status box used by both the Add form and the Edit modal. */
+function statusBoxHtml(amount, paid){
+  amount=parseFloat(amount)||0; paid=parseFloat(paid)||0;
+  if(amount<=0) return {cls:'',html:'Enter the bill amount to see the payment status.'};
+  if(paid<0 || paid>amount+0.001)
+    return {cls:'invalid',html:'&#9888; Amount paid cannot be more than the bill amount.',invalid:true};
+  var pend=r2(amount-paid);
+  if(pend>0)
+    return {cls:'pending',html:'&#9888; '+money(pend)+' pending<span class="sub">Paid '+money(paid)+' of '+money(amount)+'</span>'};
+  return {cls:'paid',html:'&#10003; Fully paid<span class="sub">This bill will appear under Paid bills.</span>'};
+}
+function applyStatus(el, st){ el.className='sb-status '+st.cls; el.innerHTML=st.html; }
+
+/* =========================================================
+   TABS
+   ========================================================= */
+function switchSbTab(tab){
+  var order=['add','view','analysis'];
+  document.querySelectorAll('.tab-btn').forEach(function(b,i){ b.classList.toggle('active',order[i]===tab); });
+  order.forEach(function(t){ document.getElementById('tab-'+t).classList.toggle('active',t===tab); });
+  if(tab==='add') renderAddTab();
+  if(tab==='view') renderBillsTable();
+  if(tab==='analysis') renderAnalysis();
+}
+
+/* =========================================================
+   SUMMARY CARDS
+   ========================================================= */
+function totalsOf(list){
+  var t={billed:0,paid:0,pending:0,unpaidCount:0,overdueCount:0,paidCount:0};
+  list.forEach(function(b){
+    t.billed+=parseFloat(b.billAmount)||0;
+    t.paid+=parseFloat(b.amountPaid)||0;
+    var p=pendingOf(b); t.pending+=p;
+    if(p>0){ t.unpaidCount++; if(dueInfo(b).overdue) t.overdueCount++; } else t.paidCount++;
+  });
+  t.billed=r2(t.billed); t.paid=r2(t.paid); t.pending=r2(t.pending);
+  return t;
+}
+function statCard(label,val,sub,color,alert){
+  return '<div class="sb-stat'+(alert?' alert':'')+'"><span class="l">'+label+'</span>'+
+    '<span class="v"'+(color?' style="color:'+color+'"':'')+'>'+val+'</span>'+
+    '<span class="s">'+(sub||'&nbsp;')+'</span></div>';
+}
+function renderTopStats(elId){
+  var t=totalsOf(allBills());
+  document.getElementById(elId).innerHTML=
+    statCard('Total Billed',money(t.billed),allBills().length+' bill(s)')+
+    statCard('Total Paid',money(t.paid),t.paidCount+' fully paid','var(--success)')+
+    statCard('Pending',money(t.pending),t.unpaidCount+' unpaid bill(s)',t.pending>0?'var(--danger)':'var(--muted)',t.pending>0)+
+    statCard('Overdue',String(t.overdueCount),t.overdueCount?'past due date':'none overdue',t.overdueCount?'var(--danger)':'var(--muted)');
+}
+
+/* =========================================================
+   TAB 1 — ADD
+   ========================================================= */
+function refreshAgencyList(){
+  var names={};
+  allBills().forEach(function(b){ if(b.agency) names[b.agency.trim().toLowerCase()]=b.agency.trim(); });
+  var list=Object.keys(names).map(function(k){return names[k];}).sort(function(a,b){return a.localeCompare(b);});
+  document.getElementById('sb-agency-list').innerHTML=list.map(function(n){return '<option value="'+esc(n)+'">';}).join('');
+  var sel=document.getElementById('sb-agency-filter'), cur=sel.value;
+  sel.innerHTML='<option value="">All agencies</option>'+list.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
+  sel.value=list.indexOf(cur)!==-1?cur:'';
+}
+function updateAddStatus(){
+  var st=statusBoxHtml(document.getElementById('sb-amount').value, document.getElementById('sb-paid').value);
+  applyStatus(document.getElementById('sb-add-status'), st);
+}
+function resetAddForm(){
+  ['sb-agency','sb-billno','sb-due','sb-amount','sb-paid'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('sb-date').value=localDateStr();
+  document.getElementById('sb-paydate').value=localDateStr();
+  updateAddStatus();
+}
+var _savingBill=false;
+async function submitBill(){
+  if(_savingBill) return;
+  var agency=document.getElementById('sb-agency').value.trim();
+  var billNo=document.getElementById('sb-billno').value.trim();
+  var date  =document.getElementById('sb-date').value;
+  var due   =document.getElementById('sb-due').value;
+  var amount=parseFloat(document.getElementById('sb-amount').value);
+  var paid  =parseFloat(document.getElementById('sb-paid').value)||0;
+  var payDate=document.getElementById('sb-paydate').value||localDateStr();
+
+  if(!agency){ RP.toast('Enter the agency name.','error'); return; }
+  if(!billNo){ RP.toast('Enter the bill number.','error'); return; }
+  if(!date){   RP.toast('Pick the bill date.','error'); return; }
+  if(!(amount>0)){ RP.toast('Enter the amount in the bill.','error'); return; }
+  if(paid<0 || paid>amount+0.001){ RP.toast('Amount paid cannot be more than the bill amount.','error'); return; }
+  if(due && due<date){ RP.toast('Due date cannot be before the bill date.','error'); return; }
+  var dup=allBills().some(function(b){ return b.agency.toLowerCase()===agency.toLowerCase() && b.billNo.toLowerCase()===billNo.toLowerCase(); });
+  if(dup){ RP.toast('This agency already has a bill with number '+billNo+'.','warn'); return; }
+
+  _savingBill=true;
+  var btn=document.getElementById('sb-save-btn'); btn.disabled=true;
+  try{
+    var saved=await RP_STOCKBILLS.add({agency:agency,billNo:billNo,billDate:date,dueDate:due,billAmount:amount,amountPaid:paid,
+      payments:paid>0?[{date:payDate,amount:paid}]:[]});
+    var pend=pendingOf(saved);
+    document.getElementById('sb-success-msg').innerHTML=
+      esc(agency)+' &middot; Bill '+esc(billNo)+'<br>'+
+      (pend>0?'<span style="color:var(--danger);font-weight:700;">&#9888; '+money(pend)+' pending</span>':'<span style="color:var(--success);font-weight:700;">&#10003; Fully paid</span>');
+    document.getElementById('sb-success-popup').classList.add('open');
+    resetAddForm(); refreshAgencyList(); renderAddTab();
+  } finally { _savingBill=false; btn.disabled=false; }
+}
+function closeSbSuccess(){ document.getElementById('sb-success-popup').classList.remove('open'); }
+
+function renderAddTab(){
+  renderTopStats('sb-top-stats');
+  var unpaid=allBills().filter(function(b){return !paidOf(b);}).sort(function(a,b){
+    var da=a.dueDate||'9999-99-99', db=b.dueDate||'9999-99-99';
+    return da===db ? (a.billDate||'').localeCompare(b.billDate||'') : da.localeCompare(db);
+  });
+  document.getElementById('sb-due-count').textContent=unpaid.length?unpaid.length+' unpaid':'';
+  var wrap=document.getElementById('sb-due-list');
+  if(!unpaid.length){
+    wrap.innerHTML='<div class="empty-state"><div class="empty-icon" style="font-size:36px;">&#10003;</div><p>No pending payments. You are all caught up.</p></div>';
+    return;
+  }
+  wrap.innerHTML=unpaid.map(function(b){
+    var di=dueInfo(b);
+    return '<div class="due-item'+(di.cls==='soon'?' soon':'')+'">'+
+      '<div style="min-width:0;flex:1;">'+
+        '<div class="nm">'+esc(b.agency)+'</div>'+
+        '<div class="mt">Bill '+esc(b.billNo)+' &middot; '+RP.fmtDate(b.billDate)+
+          (b.dueDate?' &middot; Due '+RP.fmtDate(b.dueDate):'')+'</div>'+
+        (di.text?'<div class="sb-sub '+di.cls+'">'+di.text+'</div>':'')+
+      '</div>'+
+      '<div><div class="amt">'+money(pendingOf(b))+'</div>'+
+        '<div style="text-align:right;margin-top:5px;"><button class="btn btn-sm btn-secondary" onclick="openSbEdit(\''+b.id+'\')">Update payment</button></div>'+
+      '</div></div>';
+  }).join('');
+}
+
+/* =========================================================
+   TAB 2 — VIEW & EDIT
+   ========================================================= */
+var statusFilter='all';
+function setStatusFilter(v,el){
+  statusFilter=v;
+  document.querySelectorAll('#sb-status-chips .sb-chip').forEach(function(c){c.classList.remove('active');});
+  el.classList.add('active');
+  renderBillsTable();
+}
+function clearBillFilters(){
+  document.getElementById('sb-search').value='';
+  document.getElementById('sb-agency-filter').value='';
+  document.getElementById('sb-sort').value='bill_desc';
+  document.getElementById('sb-from').value='';
+  document.getElementById('sb-to').value='';
+  statusFilter='all';
+  document.querySelectorAll('#sb-status-chips .sb-chip').forEach(function(c){c.classList.toggle('active',c.getAttribute('data-val')==='all');});
+  renderBillsTable();
+}
+
+function filteredBills(){
+  var q=document.getElementById('sb-search').value.trim().toLowerCase();
+  var ag=document.getElementById('sb-agency-filter').value;
+  var from=document.getElementById('sb-from').value;
+  var to=document.getElementById('sb-to').value;
+  var sort=document.getElementById('sb-sort').value;
+
+  var list=allBills().filter(function(b){
+    if(statusFilter==='paid'   && !paidOf(b)) return false;
+    if(statusFilter==='unpaid' &&  paidOf(b)) return false;
+    if(ag && b.agency!==ag) return false;
+    if(from && b.billDate<from) return false;
+    if(to   && b.billDate>to)   return false;
+    if(q && (b.agency+' '+b.billNo).toLowerCase().indexOf(q)===-1) return false;
+    return true;
+  });
+
+  list.sort(function(a,b){
+    if(sort==='bill_asc')  return (a.billDate||'').localeCompare(b.billDate||'');
+    if(sort==='bill_desc') return (b.billDate||'').localeCompare(a.billDate||'');
+    if(sort==='pending_desc') return pendingOf(b)-pendingOf(a);
+    // due-date sorts: bills with no due date always go to the bottom
+    var da=a.dueDate||'', db=b.dueDate||'';
+    if(!da && !db) return (b.billDate||'').localeCompare(a.billDate||'');
+    if(!da) return 1; if(!db) return -1;
+    return sort==='due_asc' ? da.localeCompare(db) : db.localeCompare(da);
+  });
+  return list;
+}
+
+function renderBillsTable(){
+  var all=allBills();
+  renderTopStats('sb-view-stats');
+  var t=totalsOf(all);
+  document.getElementById('cnt-all').textContent='('+all.length+')';
+  document.getElementById('cnt-unpaid').textContent='('+t.unpaidCount+')';
+  document.getElementById('cnt-paid').textContent='('+t.paidCount+')';
+
+  var wrap=document.getElementById('sb-table-wrap');
+  if(!all.length){
+    wrap.innerHTML='<div class="empty-state"><div class="empty-icon" style="font-size:36px;">&#128179;</div><p>No stock bills yet. Add your first bill in the Add Bills tab.</p></div>';
+    return;
+  }
+  var list=filteredBills();
+  if(!list.length){
+    wrap.innerHTML='<div class="empty-state"><div class="empty-icon" style="font-size:36px;">&#128269;</div><p>No bills match these filters.</p></div>';
+    return;
+  }
+
+  var ft=totalsOf(list);
+  var rows=list.map(function(b){
+    var p=pendingOf(b), paid=paidOf(b), di=dueInfo(b);
+    var statusCell = paid
+      ? '<span class="sb-pill green">&#10003; Paid</span>'
+      : '<span class="sb-pill red">&#9888; '+money(p)+' pending</span>';
+    return '<tr class="'+(paid?'row-paid':'row-unpaid')+'">'+
+      '<td>'+RP.fmtDate(b.billDate)+'</td>'+
+      '<td><div style="font-weight:600;">'+esc(b.agency)+'</div><div class="sb-sub">Bill '+esc(b.billNo)+'</div></td>'+
+      '<td>'+(b.dueDate?RP.fmtDate(b.dueDate):'<span style="color:var(--muted);">&mdash;</span>')+
+        (di.text?'<div class="sb-sub '+di.cls+'">'+di.text+'</div>':'')+'</td>'+
+      '<td class="num">'+money(b.billAmount)+'</td>'+
+      '<td class="num" style="color:var(--success);">'+money(b.amountPaid)+
+        (lastPayDate(b)?'<div class="sb-sub" style="font-family:\'DM Sans\',sans-serif;">Last paid '+RP.fmtDate(lastPayDate(b))+'</div>':'')+'</td>'+
+      '<td>'+statusCell+'</td>'+
+      '<td><div class="sb-actions">'+
+        '<button class="btn btn-sm btn-secondary" onclick="openSbEdit(\''+b.id+'\')">Edit</button>'+
+        '<button class="btn btn-sm btn-danger" onclick="openSbDel(\''+b.id+'\')">Del</button>'+
+      '</div></td></tr>';
+  }).join('');
+
+  wrap.innerHTML='<table class="sb-table"><thead><tr>'+
+    '<th>Bill Date</th><th>Agency / Bill No.</th><th>Due Date</th>'+
+    '<th class="num">Bill Amount</th><th class="num">Paid</th><th>Status</th><th></th>'+
+    '</tr></thead><tbody>'+rows+'</tbody>'+
+    '<tfoot><tr><td colspan="3">Showing '+list.length+' bill(s)</td>'+
+      '<td class="num">'+money(ft.billed)+'</td>'+
+      '<td class="num" style="color:var(--success);">'+money(ft.paid)+'</td>'+
+      '<td style="color:'+(ft.pending>0?'var(--danger)':'var(--success)')+';">'+(ft.pending>0?money(ft.pending)+' pending':'All paid')+'</td><td></td></tr></tfoot></table>';
+}
+
+/* ---- Edit ---- */
+var editId=null;
+function openSbEdit(id){
+  var b=RP_STOCKBILLS.getById(id); if(!b) return;
+  editId=id;
+  document.getElementById('se-agency').value=b.agency;
+  document.getElementById('se-billno').value=b.billNo;
+  document.getElementById('se-date').value=b.billDate;
+  document.getElementById('se-due').value=b.dueDate||'';
+  document.getElementById('se-amount').value=b.billAmount;
+  document.getElementById('se-paid').value=b.amountPaid;
+  document.getElementById('se-paydate').value=localDateStr();
+  var pays=paymentsOf(b).sort(function(a,c){return (a.date||'').localeCompare(c.date||'');});
+  document.getElementById('se-history').innerHTML=pays.length
+    ? 'Payments so far: '+pays.map(function(p){return money(p.amount)+' on '+RP.fmtDate(p.date);}).join(' &nbsp;&middot;&nbsp; ')
+    : 'No payments recorded yet.';
+  updateEditStatus();
+  document.getElementById('sb-edit-modal').classList.add('open');
+}
+function closeSbEdit(){ document.getElementById('sb-edit-modal').classList.remove('open'); editId=null; }
+function updateEditStatus(){
+  var st=statusBoxHtml(document.getElementById('se-amount').value, document.getElementById('se-paid').value);
+  applyStatus(document.getElementById('se-status'), st);
+  document.getElementById('se-save-btn').disabled=!!st.invalid;
+}
+function markFullyPaid(){
+  document.getElementById('se-paid').value=document.getElementById('se-amount').value||0;
+  updateEditStatus();
+}
+async function saveSbEdit(){
+  if(!editId) return;
+  var agency=document.getElementById('se-agency').value.trim();
+  var billNo=document.getElementById('se-billno').value.trim();
+  var date  =document.getElementById('se-date').value;
+  var due   =document.getElementById('se-due').value;
+  var amount=parseFloat(document.getElementById('se-amount').value);
+  var paid  =parseFloat(document.getElementById('se-paid').value)||0;
+  var payDate=document.getElementById('se-paydate').value||localDateStr();
+
+  if(!agency||!billNo||!date){ RP.toast('Agency, bill number and bill date are required.','error'); return; }
+  if(!(amount>0)){ RP.toast('Enter the amount in the bill.','error'); return; }
+  if(paid<0 || paid>amount+0.001){ RP.toast('Amount paid cannot be more than the bill amount.','error'); return; }
+  if(due && due<date){ RP.toast('Due date cannot be before the bill date.','error'); return; }
+  var dup=allBills().some(function(b){ return b.id!==editId && b.agency.toLowerCase()===agency.toLowerCase() && b.billNo.toLowerCase()===billNo.toLowerCase(); });
+  if(dup){ RP.toast('Another bill from this agency already has number '+billNo+'.','warn'); return; }
+
+  var btn=document.getElementById('se-save-btn'); btn.disabled=true;
+  var old=RP_STOCKBILLS.getById(editId);
+  var wasPaid=paidOf(old);
+  // Payment log: a higher paid total adds a payment dated "Payment Date";
+  // a lower total (a correction) trims the most recent payments.
+  var pays=paymentsOf(old);
+  var delta=r2(paid-r2(old.amountPaid));
+  if(delta>0) pays.push({date:payDate,amount:delta});
+  pays=paymentsOf({payments:pays,amountPaid:paid,billDate:date});
+  var saved=await RP_STOCKBILLS.update(editId,{agency:agency,billNo:billNo,billDate:date,dueDate:due,billAmount:amount,amountPaid:paid,payments:pays});
+  btn.disabled=false;
+  closeSbEdit();
+  refreshAgencyList(); renderBillsTable(); renderAddTab();
+  if(saved && !wasPaid && paidOf(saved)) RP.toast('Bill fully paid — moved to Paid bills.');
+  else RP.toast('Bill updated.');
+}
+
+/* ---- Delete ---- */
+var delId=null;
+function openSbDel(id){
+  var b=RP_STOCKBILLS.getById(id); if(!b) return;
+  delId=id;
+  document.getElementById('sb-del-text').textContent=
+    b.agency+' — Bill '+b.billNo+' ('+money(b.billAmount)+'). This removes the bill record only. Your stock and sales are not changed. This cannot be undone.';
+  document.getElementById('sb-del-modal').classList.add('open');
+}
+function closeSbDel(){ document.getElementById('sb-del-modal').classList.remove('open'); delId=null; }
+async function confirmSbDelete(){
+  if(!delId) return;
+  var id=delId; closeSbDel();
+  await RP_STOCKBILLS.delete(id);
+  refreshAgencyList(); renderBillsTable(); renderAddTab();
+  RP.toast('Bill deleted.');
+}
+
+/* =========================================================
+   TAB 3 — ANALYSIS
+   ========================================================= */
+var paidBasis='paydate', anCat='since', trendField='all', trendType='bar', agMetric='billed', agType='bar';
+var charts={};
+var COL={sell:'#00d4aa', paid:'#f59e0b', net:'#3b82f6', pending:'#ef4444', ok:'#22c55e'};
+var PALETTE=['#00d4aa','#3b82f6','#f59e0b','#ef4444','#a855f7','#ec4899','#14b8a6','#eab308','#6366f1','#84cc16','#f97316','#06b6d4'];
+
+function themeColor(v,fb){ var x=getComputedStyle(document.documentElement).getPropertyValue(v); return (x&&x.trim())||fb; }
+function hexToRgba(hex,a){
+  var h=hex.replace('#','');
+  return 'rgba('+parseInt(h.substring(0,2),16)+','+parseInt(h.substring(2,4),16)+','+parseInt(h.substring(4,6),16)+','+a+')';
+}
+function destroyChart(k){ if(charts[k]){ try{charts[k].destroy();}catch(e){} charts[k]=null; } }
+function emptyOverlay(id,show){ document.getElementById(id).classList.toggle('show',show); }
+
+function switchAnCategory(cat,el){
+  anCat=cat;
+  document.querySelectorAll('.an-cat-chip').forEach(function(c){c.classList.remove('active');});
+  el.classList.add('active');
+  document.querySelectorAll('.an-subcontrol').forEach(function(c){c.classList.remove('active');});
+  document.getElementById('an-sub-'+cat).classList.add('active');
+  renderAnalysis();
+}
+function shiftAnMonth(dir){
+  var el=document.getElementById('an-month');
+  el.value=addMonths(el.value||localDateStr().slice(0,7),dir);
+  renderAnalysis();
+}
+function setPaidBasis(v,el){ paidBasis=v; activate(el); renderAnalysis(); }
+function setTrendField(v,el){ trendField=v; activate(el); renderAnalysis(); }
+function setTrendType(v,el){ trendType=v; activate(el); renderAnalysis(); }
+function setAgMetric(v,el){ agMetric=v; activate(el); renderAnalysis(); }
+function setAgType(v,el){ agType=v; activate(el); renderAnalysis(); }
+function activate(el){
+  Array.prototype.forEach.call(el.parentNode.querySelectorAll('.chart-toggle-btn'),function(b){b.classList.remove('active');});
+  el.classList.add('active');
+}
+
+var SINCE_KEY='rp_sb_since_month';
+function onSinceChange(){
+  var v=document.getElementById('an-since').value;
+  if(v){ try{ localStorage.setItem(SINCE_KEY,v); }catch(e){} }
+  renderAnalysis();
+}
+
+function refreshAnYears(){
+  var years={}; years[new Date().getFullYear()]=1;
+  allBills().forEach(function(b){ if(b.billDate) years[b.billDate.slice(0,4)]=1; });
+  RP_SALES.getAll().forEach(function(s){ var d=RP_SALES._saleDate(s); if(d) years[d.slice(0,4)]=1; });
+  var sel=document.getElementById('an-year'), cur=sel.value;
+  var list=Object.keys(years).sort().reverse();
+  sel.innerHTML=list.map(function(y){return '<option value="'+y+'">'+y+'</option>';}).join('');
+  sel.value=list.indexOf(cur)!==-1?cur:String(new Date().getFullYear());
+}
+
+/* Work out {from,to,gran,buckets,labels,keyFn} for the chosen period.
+   gran = 'day' for a month or any range up to ~2 months, otherwise 'month'. */
+function buildPeriod(){
+  var today=localDateStr(), from, to;
+  if(anCat==='month'){
+    var ym=document.getElementById('an-month').value||today.slice(0,7);
+    from=ym+'-01'; to=ym+'-'+String(daysInMonth(ym)).padStart(2,'0');
+  } else if(anCat==='year'){
+    var y=document.getElementById('an-year').value||String(new Date().getFullYear());
+    from=y+'-01-01'; to=y+'-12-31';
+  } else if(anCat==='since'){
+    var sm=document.getElementById('an-since').value||'2026-10';
+    from=sm+'-01';
+    // run to today, or to the latest sale/bill date if that is later
+    to=today;
+    allBills().forEach(function(b){ if(b.billDate && b.billDate>to) to=b.billDate; });
+    RP_SALES.getAll().forEach(function(x){ var d=RP_SALES._saleDate(x); if(d && d>to) to=d; });
+  } else if(anCat==='range'){
+    from=document.getElementById('an-from').value||today.slice(0,7)+'-01';
+    to=document.getElementById('an-to').value||today;
+    if(to<from){ var tmp=from; from=to; to=tmp; }
+  } else {
+    var dates=[];
+    allBills().forEach(function(b){ if(b.billDate) dates.push(b.billDate); });
+    RP_SALES.getAll().forEach(function(s){ var d=RP_SALES._saleDate(s); if(d) dates.push(d); });
+    dates.sort();
+    from=dates.length?dates[0]:today; to=dates.length?dates[dates.length-1]:today;
+    if(to<today) to=today;
+  }
+  var gran=daysBetween(from,to)<=62?'day':'month';
+  var buckets=[], labels=[];
+  if(gran==='day'){
+    for(var d=from; d<=to; d=addDays(d,1)){
+      buckets.push(d);
+      labels.push(new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}));
+    }
+  } else {
+    for(var m=from.slice(0,7); m<=to.slice(0,7); m=addMonths(m,1)){ buckets.push(m); labels.push(monthLabel(m)); }
+  }
+  return {from:from,to:to,gran:gran,buckets:buckets,labels:labels,
+          keyFn:function(dateStr){ return gran==='day'?dateStr:dateStr.slice(0,7); }};
+}
+
+function renderAnalysis(){
+  refreshAnYears();
+  var p=buildPeriod();
+  var sinceLbl=document.getElementById('an-since-range');
+  if(sinceLbl) sinceLbl.textContent=(anCat==='since')
+    ? RP.fmtDate(p.from)+' \u2192 '+RP.fmtDate(p.to)+(p.gran==='month'?' \u00b7 graphs show month by month':' \u00b7 graphs show day by day')
+    : '';
+  var sales=RP_SALES.getAll().filter(function(s){ var d=RP_SALES._saleDate(s); return d>=p.from && d<=p.to; });
+  var bills=allBills().filter(function(b){ return b.billDate>=p.from && b.billDate<=p.to; });
+
+  var selling=r2(sales.reduce(function(a,s){return a+(parseFloat(s.totalSelling)||0);},0));
+  var t=totalsOf(bills);   // bills DATED in this period (used for billed / status / agency views)
+
+  /* Money paid out in this period.
+     Payment date: every payment made inside the period, on ANY bill (even older ones).
+     Bill date:    amount paid so far on bills dated inside the period. */
+  var payEvents=[];
+  if(paidBasis==='paydate'){
+    allBills().forEach(function(b){
+      paymentsOf(b).forEach(function(pm){ if(pm.date>=p.from && pm.date<=p.to) payEvents.push(pm); });
+    });
+  } else {
+    bills.forEach(function(b){ payEvents.push({date:b.billDate,amount:r2(b.amountPaid)}); });
+  }
+  var paidPeriod=r2(payEvents.reduce(function(a,e){return a+e.amount;},0));
+  var tp=Object.assign({},t,{paid:paidPeriod});                 // totals with the chosen "paid" meaning
+  var pendingShown=(paidBasis==='paydate')?totalsOf(allBills()):t; // outstanding to agencies
+  tp.pending=pendingShown.pending;
+  var finalProfit=r2(selling-paidPeriod);
+  var ifCleared=r2(selling-t.billed);
+  document.getElementById('an-basis-note').textContent=(paidBasis==='paydate')
+    ? 'Paid counts every payment made between these dates, even on older bills. Pending shows everything you still owe agencies right now.'
+    : 'Paid counts what you have paid so far on bills dated between these dates, whenever the payment was made.';
+
+  document.getElementById('an-stat-grid').innerHTML=
+    statCard('Total Selling (Stock Sale)',money(selling),sales.length+' sale record(s)','var(--success)')+
+    statCard('Bills Paid',money(paidPeriod),(paidBasis==='paydate'?'paid in this period':'on bills dated in period')+' &middot; '+money(t.billed)+' billed in period',COL.paid)+
+    statCard('Final Profit',(finalProfit<0?'- ':'')+money(Math.abs(finalProfit)),'Selling &minus; Bills Paid',finalProfit>=0?'var(--success)':'var(--danger)')+
+    statCard('Pending to Agencies',money(pendingShown.pending),pendingShown.unpaidCount+' unpaid bill(s)'+(paidBasis==='paydate'?' (all bills, now)':''),pendingShown.pending>0?'var(--danger)':'var(--muted)',pendingShown.pending>0)+
+    statCard('Profit After Clearing Period Bills',(ifCleared<0?'- ':'')+money(Math.abs(ifCleared)),'Selling &minus; bills dated in period',ifCleared>=0?'var(--success)':'var(--danger)')+
+    statCard('Paid Out vs Selling',selling>0?(paidPeriod/selling*100).toFixed(1)+'%':'—','share of selling spent on bills');
+
+  /* ---- bucket the money ---- */
+  var map={}; p.buckets.forEach(function(k){ map[k]={sell:0,paid:0}; });
+  sales.forEach(function(s){ var k=p.keyFn(RP_SALES._saleDate(s)); if(map[k]) map[k].sell+=parseFloat(s.totalSelling)||0; });
+  payEvents.forEach(function(ev){ var k=p.keyFn(ev.date); if(map[k]) map[k].paid+=ev.amount; });
+  var sellArr=p.buckets.map(function(k){return r2(map[k].sell);});
+  var paidArr=p.buckets.map(function(k){return r2(map[k].paid);});
+  var netArr =p.buckets.map(function(k,i){return r2(sellArr[i]-paidArr[i]);});
+
+  var textColor=themeColor('--muted','#94a3b8'), gridColor=themeColor('--border','rgba(148,163,184,.15)');
+  var hasMoney=(selling>0||paidPeriod>0||t.billed>0);
+
+  renderTrend(p,sellArr,paidArr,netArr,hasMoney,textColor,gridColor);
+  renderStatusChart(bills,t,textColor);
+  renderFlowChart(selling,tp,finalProfit,hasMoney,textColor,gridColor);
+  renderCumChart(p,sellArr,paidArr,hasMoney,textColor,gridColor);
+  renderAgencyChart(bills,textColor,gridColor);
+}
+
+function moneyAxis(textColor,gridColor){
+  return { x:{ticks:{color:textColor,maxRotation:60,autoSkip:true},grid:{color:gridColor}},
+           y:{ticks:{color:textColor,callback:function(v){return 'Rs.'+v;}},grid:{color:gridColor}} };
+}
+function moneyTip(){ return {callbacks:{label:function(c){ return c.dataset.label+': Rs.'+(c.parsed.y!=null?c.parsed.y:c.parsed).toFixed(2); }}}; }
+
+/* 1. Selling vs Paid vs Final Profit */
+function renderTrend(p,sellArr,paidArr,netArr,hasMoney,tc,gc){
+  destroyChart('trend');
+  if(!hasMoney){ emptyOverlay('em-trend',true); return; }
+  emptyOverlay('em-trend',false);
+  var isLine=(trendType==='line'||trendType==='area'), fill=(trendType==='area');
+  var all=[
+    {key:'sell',label:'Total Selling',color:COL.sell,data:sellArr},
+    {key:'paid',label:'Bills Paid',color:COL.paid,data:paidArr},
+    {key:'net', label:'Final Profit',color:COL.net, data:netArr}
+  ];
+  var chosen=trendField==='all'?all:all.filter(function(d){return d.key===trendField;});
+  charts.trend=new Chart(document.getElementById('ch-trend').getContext('2d'),{
+    type:isLine?'line':'bar',
+    data:{labels:p.labels,datasets:chosen.map(function(d){
+      return {label:d.label,data:d.data,backgroundColor:isLine?hexToRgba(d.color,.15):d.color,
+              borderColor:d.color,borderWidth:2,tension:.35,fill:fill,borderRadius:isLine?0:6,pointRadius:p.gran==='day'?2:3};
+    })},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{labels:{color:tc,usePointStyle:true}},tooltip:moneyTip()},scales:moneyAxis(tc,gc)}
+  });
+}
+
+/* 2. Paid vs Pending (pending split into on-time and overdue) */
+function renderStatusChart(bills,t,tc){
+  destroyChart('status');
+  if(!bills.length){ emptyOverlay('em-status',true); return; }
+  emptyOverlay('em-status',false);
+  var overdue=0;
+  bills.forEach(function(b){ if(!paidOf(b) && dueInfo(b).overdue) overdue+=pendingOf(b); });
+  overdue=r2(overdue);
+  var pendingOk=r2(t.pending-overdue);
+  var labels=['Paid','Pending','Overdue'], data=[t.paid,pendingOk,overdue], colors=[COL.ok,COL.paid,COL.pending];
+  charts.status=new Chart(document.getElementById('ch-status').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:labels,datasets:[{data:data,backgroundColor:colors,borderColor:themeColor('--surface','#fff'),borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',
+      plugins:{legend:{position:'bottom',labels:{color:tc,usePointStyle:true}},
+        tooltip:{callbacks:{label:function(c){
+          var tot=data.reduce(function(a,b){return a+b;},0)||1;
+          return c.label+': Rs.'+c.parsed.toFixed(2)+' ('+(c.parsed/tot*100).toFixed(1)+'%)';
+        }}}}}
+  });
+}
+
+/* 3. Where your money goes — horizontal bars */
+function renderFlowChart(selling,t,finalProfit,hasMoney,tc,gc){
+  destroyChart('flow');
+  if(!hasMoney){ emptyOverlay('em-flow',true); return; }
+  emptyOverlay('em-flow',false);
+  var labels=['Total Selling','Billed in Period','Bills Paid','Still Pending','Final Profit'];
+  var data=[selling,t.billed,t.paid,t.pending,finalProfit];
+  var colors=[COL.sell,'#a855f7',COL.paid,COL.pending,finalProfit>=0?COL.net:'#dc2626'];
+  charts.flow=new Chart(document.getElementById('ch-flow').getContext('2d'),{
+    type:'bar',
+    data:{labels:labels,datasets:[{label:'Amount',data:data,backgroundColor:colors,borderRadius:6}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return 'Rs.'+c.parsed.x.toFixed(2);}}}},
+      scales:{x:{ticks:{color:tc,callback:function(v){return 'Rs.'+v;}},grid:{color:gc}},
+              y:{ticks:{color:tc},grid:{display:false}}}}
+  });
+}
+
+/* 4. Running totals */
+function renderCumChart(p,sellArr,paidArr,hasMoney,tc,gc){
+  destroyChart('cum');
+  if(!hasMoney){ emptyOverlay('em-cum',true); return; }
+  emptyOverlay('em-cum',false);
+  var cs=0,cp=0;
+  var cumSell=sellArr.map(function(v){cs+=v;return r2(cs);});
+  var cumPaid=paidArr.map(function(v){cp+=v;return r2(cp);});
+  charts.cum=new Chart(document.getElementById('ch-cum').getContext('2d'),{
+    type:'line',
+    data:{labels:p.labels,datasets:[
+      {label:'Cumulative Selling',data:cumSell,borderColor:COL.sell,backgroundColor:hexToRgba(COL.sell,.18),fill:true,tension:.3,borderWidth:2,pointRadius:p.gran==='day'?1.5:3},
+      {label:'Cumulative Bills Paid',data:cumPaid,borderColor:COL.paid,backgroundColor:hexToRgba(COL.paid,.05),fill:false,tension:.3,borderWidth:2.5,borderDash:[6,4],pointRadius:p.gran==='day'?1.5:3}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{labels:{color:tc,usePointStyle:true}},tooltip:moneyTip()},scales:moneyAxis(tc,gc)}
+  });
+}
+
+/* 5. Bills by agency */
+function renderAgencyChart(bills,tc,gc){
+  destroyChart('agency');
+  var byAg={};
+  bills.forEach(function(b){
+    var k=b.agency||'Unknown';
+    if(!byAg[k]) byAg[k]={billed:0,paid:0,pending:0};
+    byAg[k].billed+=parseFloat(b.billAmount)||0;
+    byAg[k].paid+=parseFloat(b.amountPaid)||0;
+    byAg[k].pending+=pendingOf(b);
+  });
+  var rows=Object.keys(byAg).map(function(k){return {name:k,v:r2(byAg[k][agMetric])};})
+    .filter(function(r){return r.v>0;}).sort(function(a,b){return b.v-a.v;});
+  if(!rows.length){ emptyOverlay('em-agency',true); return; }
+  emptyOverlay('em-agency',false);
+  if(rows.length>10){
+    var rest=rows.slice(9).reduce(function(a,r){return a+r.v;},0);
+    rows=rows.slice(0,9); rows.push({name:'Others',v:r2(rest)});
+  }
+  var base={bar:COL.sell,pie:null,doughnut:null};
+  var metricColor={billed:'#a855f7',paid:COL.paid,pending:COL.pending}[agMetric];
+  var isBar=(agType==='bar');
+  charts.agency=new Chart(document.getElementById('ch-agency').getContext('2d'),{
+    type:agType,
+    data:{labels:rows.map(function(r){return r.name;}),
+      datasets:[{label:{billed:'Billed',paid:'Paid',pending:'Pending'}[agMetric],data:rows.map(function(r){return r.v;}),
+        backgroundColor:isBar?metricColor:rows.map(function(r,i){return PALETTE[i%PALETTE.length];}),
+        borderColor:isBar?metricColor:themeColor('--surface','#fff'),borderWidth:isBar?0:2,borderRadius:isBar?6:0}]},
+    options:Object.assign({responsive:true,maintainAspectRatio:false},
+      isBar?{plugins:{legend:{display:false},tooltip:moneyTip()},scales:moneyAxis(tc,gc)}
+           :{plugins:{legend:{position:'right',labels:{color:tc,usePointStyle:true}},
+              tooltip:{callbacks:{label:function(c){
+                var tot=rows.reduce(function(a,r){return a+r.v;},0)||1;
+                return c.label+': Rs.'+c.parsed.toFixed(2)+' ('+(c.parsed/tot*100).toFixed(1)+'%)';}}}}})
+  });
+}
+
+/* =========================================================
+   SYNC + INIT
+   ========================================================= */
+window._rpOnSyncComplete=function(){
+  refreshAgencyList(); refreshAnYears(); renderAddTab();
+  if(document.getElementById('tab-view').classList.contains('active')) renderBillsTable();
+  if(document.getElementById('tab-analysis').classList.contains('active')) renderAnalysis();
+};
+RP.showSyncBanner('sb-sync-banner');
+
+document.getElementById('sb-date').value=localDateStr();
+document.getElementById('sb-paydate').value=localDateStr();
+var savedSince=null; try{ savedSince=localStorage.getItem('rp_sb_since_month'); }catch(e){}
+document.getElementById('an-since').value=savedSince||'2026-10'; // October 2026 by default
+document.getElementById('an-month').value=localDateStr().slice(0,7);
+document.getElementById('an-from').value=localDateStr().slice(0,7)+'-01';
+document.getElementById('an-to').value=localDateStr();
+refreshAgencyList();
+refreshAnYears();
+updateAddStatus();
+renderAddTab();
+</script>
+</body>
+</html>

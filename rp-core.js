@@ -1,8 +1,7 @@
 const RP = {
 
   // ---- IMPORTANT: Replace with your deployed Apps Script URL ----
-      SHEET_URL: 'https://script.google.com/macros/s/AKfycbzf7bW9ZtKQBiS-78ShzBTx8OQKndbaXWOnNgva2cbJmPrUmEd8O_1ajnQx6nqDQrECMA/exec',
-
+      SHEET_URL: 'https://script.google.com/macros/s/AKfycbwls68nRA7lTM0HGvWoo6YlH9N44CsGo_ZpHTJtDZNMAV9FFwzfzhceMXc9YnFVMrXvJg/exec',
   OWNER_EMAIL: 'saivenkatachala@gmail.com',
 
   MED_TYPES: [
@@ -97,6 +96,7 @@ const RP = {
         if(Array.isArray(data.bills))  this._setCached(this._KEY_BILLS, data.bills);
         if(Array.isArray(data.sales))  { try{ localStorage.setItem('rp_sales_cache', JSON.stringify(data.sales)); }catch(e){} }
         if(Array.isArray(data.saleBills)) { try{ localStorage.setItem('rp_salebills_cache', JSON.stringify(data.saleBills)); }catch(e){} }
+        if(Array.isArray(data.stockBills)) { try{ localStorage.setItem('rp_stockbills_cache', JSON.stringify(data.stockBills)); }catch(e){} }
         localStorage.setItem(this._KEY_SYNC_TS, new Date().toISOString());
         console.info('[RP] Synced from Sheet —', (data.stock||[]).length, 'stock items,', (data.bills||[]).length, 'bills.');
         return { ok: true, stock: data.stock, bills: data.bills };
@@ -602,5 +602,75 @@ const RP_BILLS = {
   async delete(id){
     this._set(this._get().filter(b => b.id !== id));
     await RP.postToSheet({ action: 'deleteSaleBill', id: id });
+  }
+};
+
+// ============================================================
+// STOCK BILLS  (Stock Bills page — what you owe your agencies)
+// ============================================================
+// Supplier / agency bills for stock you purchased. Separate from Sales
+// and from customer bills. Each bill =
+//   { id, agency, billNo, billDate, dueDate, billAmount, amountPaid }
+// "Pending" is never stored as truth — it is always billAmount - amountPaid.
+// A bill is PAID when amountPaid >= billAmount.
+const RP_STOCKBILLS = {
+  _KEY: 'rp_stockbills_cache',
+  _get(){ try{ return JSON.parse(localStorage.getItem(this._KEY)||'[]'); }catch{ return []; } },
+  _set(arr){ try{ localStorage.setItem(this._KEY, JSON.stringify(arr)); }catch(e){} },
+
+  getAll(){ return this._get(); },
+  getById(id){ return this._get().find(b => b.id === id) || null; },
+
+  // Money helpers (rounded to paise so float noise never shows)
+  pending(b){ return Math.max(0, Math.round(((parseFloat(b.billAmount)||0) - (parseFloat(b.amountPaid)||0)) * 100) / 100); },
+  isPaid(b){ return this.pending(b) <= 0; },
+
+  _clean(b){
+    return {
+      id         : b.id,
+      agency     : String(b.agency||'').trim(),
+      billNo     : String(b.billNo||'').trim(),
+      billDate   : String(b.billDate||'').slice(0,10),
+      dueDate    : String(b.dueDate||'').slice(0,10),
+      billAmount : Math.round((parseFloat(b.billAmount)||0)*100)/100,
+      amountPaid : Math.round((parseFloat(b.amountPaid)||0)*100)/100,
+      createdOn  : b.createdOn,
+      updatedOn  : b.updatedOn || '',
+      // Every payment made on this bill: [{ date:'YYYY-MM-DD', amount }]. Lets Analysis count
+      // money in the month it was actually paid.
+      payments   : (Array.isArray(b.payments) ? b.payments : [])
+                     .map(function(p){ return { date: String(p.date||'').slice(0,10), amount: Math.round((parseFloat(p.amount)||0)*100)/100 }; })
+                     .filter(function(p){ return p.amount > 0; })
+    };
+  },
+
+  async add(bill){
+    bill.id        = bill.id || RP.uid();
+    bill.createdOn = bill.createdOn || new Date().toISOString();
+    bill.billDate  = (bill.billDate && bill.billDate.length >= 10) ? bill.billDate.slice(0,10) : RP.localDateStr();
+    const clean = this._clean(bill);
+    const all = this._get();
+    all.push(clean);
+    this._set(all);
+    await RP.postToSheet({ action: 'addStockBill', data: clean });
+    return clean;
+  },
+
+  // `changes` is a partial object merged onto the saved bill (e.g. { amountPaid: 2000 })
+  async update(id, changes){
+    const all = this._get();
+    const idx = all.findIndex(b => b.id === id);
+    if(idx === -1) return null;
+    const merged = this._clean(Object.assign({}, all[idx], changes, { id: id, updatedOn: RP.localDateStr() }));
+    all[idx] = merged;
+    this._set(all);
+    await RP.postToSheet({ action: 'updateStockBill', data: merged });
+    return merged;
+  },
+
+  async delete(id){
+    this._set(this._get().filter(b => b.id !== id));
+    await RP.postToSheet({ action: 'deleteStockBill', id: id });
+    return true;
   }
 };
