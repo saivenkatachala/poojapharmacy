@@ -205,8 +205,8 @@
     <a href="dashboard.html" class="nav-link">&#127968; <span class="nav-text">Home</span></a>
     <a href="add-stock.html" class="nav-link">&#10133; <span class="nav-text">Add Stock</span></a>
     <a href="stock-sale.html" class="nav-link">&#128200; <span class="nav-text">Stock Sale</span></a>
-    <a href="stockbills.html" class="nav-link active">&#128179; <span class="nav-text">Stock Bills</span></a>
     <a href="view-stock.html" class="nav-link">&#128230; <span class="nav-text">View Stock</span></a>
+    <a href="stockbills.html" class="nav-link active">&#128179; <span class="nav-text">Stock Bills</span></a>
     <a href="billing.html" class="nav-link">&#128451; <span class="nav-text">Bill Generation</span></a>
     <a href="alerts.html" class="nav-link">&#128276; <span class="nav-text">Alerts</span>
       <span class="badge" id="alert-badge" style="display:none">0</span></a>
@@ -296,6 +296,7 @@
     </div>
 
     <div class="sb-modal-foot">
+      <button class="btn btn-danger" style="margin-right:auto;" onclick="act(this,'Opening...',deleteFromEdit,300)">&#128465; Delete Bill</button>
       <button class="btn btn-secondary" onclick="act(this,'Closing...',closeSbEdit,250)">Cancel</button>
       <button class="btn btn-primary" id="se-save-btn" onclick="saveSbEdit()">Save Changes</button>
     </div>
@@ -957,7 +958,7 @@ function renderBillsTable(){
       '<td>'+statusCell+'</td>'+
       '<td><div class="sb-actions">'+
         '<button class="btn btn-sm btn-secondary" onclick="actEdit(this,\''+b.id+'\')">Edit</button>'+
-        '<button class="btn btn-sm btn-danger" onclick="actDel(this,\''+b.id+'\')">Del</button>'+
+        '<button class="btn btn-sm btn-danger" onclick="actDel(this,\''+b.id+'\')">&#128465; Delete</button>'+
       '</div></td></tr>';
   }).join('');
 
@@ -1044,8 +1045,15 @@ function openSbDel(id){
   var b=RP_STOCKBILLS.getById(id); if(!b) return;
   delId=id;
   document.getElementById('sb-del-text').textContent=
-    b.agency+' — Bill '+b.billNo+' ('+money(b.billAmount)+'). This removes the bill record only. Your stock and sales are not changed. This cannot be undone.';
+    b.agency+' — Bill '+b.billNo+' ('+money(b.billAmount)+'). '+
+    (parseFloat(b.amountPaid)>0 ? money(b.amountPaid)+' paid on this bill will no longer be counted in Analysis. ' : '')+
+    'Your stock and sales are not changed. This cannot be undone.';
   document.getElementById('sb-del-modal').classList.add('open');
+}
+function deleteFromEdit(){
+  var id=editId;
+  closeSbEdit();
+  if(id) openSbDel(id);
 }
 function closeSbDel(){ document.getElementById('sb-del-modal').classList.remove('open'); delId=null; }
 async function confirmSbDelete(){
