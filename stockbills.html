@@ -163,9 +163,9 @@
     <a href="dashboard.html" class="nav-link">&#127968; <span class="nav-text">Home</span></a>
     <a href="add-stock.html" class="nav-link">&#10133; <span class="nav-text">Add Stock</span></a>
     <a href="stock-sale.html" class="nav-link">&#128200; <span class="nav-text">Stock Sale</span></a>
+    <a href="stockbills.html" class="nav-link active">&#128179; <span class="nav-text">Stock Bills</span></a>
     <a href="view-stock.html" class="nav-link">&#128230; <span class="nav-text">View Stock</span></a>
     <a href="billing.html" class="nav-link">&#128451; <span class="nav-text">Bill Generation</span></a>
-    <a href="stockbills.html" class="nav-link active">&#128179; <span class="nav-text">Stock Bills</span></a>
     <a href="alerts.html" class="nav-link">&#128276; <span class="nav-text">Alerts</span>
       <span class="badge" id="alert-badge" style="display:none">0</span></a>
   </div>
@@ -199,7 +199,8 @@
       <div class="sb-form-grid">
         <div class="field full">
           <label>Agency Name</label>
-          <input class="sb-input" id="se-agency" list="sb-agency-list" oninput="updateEditStatus()"/>
+          <select class="sb-input" id="se-agency-sel" onchange="onAgencyChange('se')"></select>
+          <input class="sb-input" id="se-agency" placeholder="Type the new agency name" autocomplete="off" style="display:none;margin-top:8px;"/>
         </div>
         <div class="field">
           <label>Bill Number</label>
@@ -286,7 +287,8 @@
           <div class="sb-form-grid">
             <div class="field full">
               <label>Agency Name</label>
-              <input class="sb-input" id="sb-agency" list="sb-agency-list" placeholder="e.g. Sri Sai Medical Agencies" autocomplete="off"/>
+              <select class="sb-input" id="sb-agency-sel" onchange="onAgencyChange('sb')"></select>
+              <input class="sb-input" id="sb-agency" placeholder="Type the new agency name" autocomplete="off" style="display:none;margin-top:8px;"/>
             </div>
             <div class="field">
               <label>Bill Number</label>
@@ -649,6 +651,56 @@ function renderTopStats(elId){
 /* =========================================================
    TAB 1 — ADD
    ========================================================= */
+/* ---- Agency dropdown: fixed names + any agency already saved on a bill + "Custom" ---- */
+var BASE_AGENCIES=['Sri Venkateswara Galaxy','Sai Marketing'];
+var CUSTOM_VAL='__custom__';
+function agencyOptions(){
+  var seen={}, list=[];
+  BASE_AGENCIES.forEach(function(n){ seen[n.toLowerCase()]=1; list.push(n); });
+  var extra=[];
+  allBills().forEach(function(b){
+    var n=(b.agency||'').trim();
+    if(n && !seen[n.toLowerCase()]){ seen[n.toLowerCase()]=1; extra.push(n); }
+  });
+  extra.sort(function(a,b){return a.localeCompare(b);});
+  return list.concat(extra);
+}
+function fillAgencySelects(){
+  var opts=agencyOptions();
+  ['sb','se'].forEach(function(pre){
+    var sel=document.getElementById(pre+'-agency-sel'), cur=sel.value;
+    sel.innerHTML='<option value="">Select agency...</option>'+
+      opts.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('')+
+      '<option value="'+CUSTOM_VAL+'">Custom (type a new name)</option>';
+    var ok=Array.prototype.some.call(sel.options,function(o){return o.value===cur;});
+    sel.value=ok?cur:'';
+  });
+}
+function onAgencyChange(pre){
+  var custom=document.getElementById(pre+'-agency-sel').value===CUSTOM_VAL;
+  var inp=document.getElementById(pre+'-agency');
+  inp.style.display=custom?'block':'none';
+  if(custom) inp.focus(); else inp.value='';
+}
+function getAgency(pre){
+  var v=document.getElementById(pre+'-agency-sel').value;
+  if(v!==CUSTOM_VAL) return v;
+  var typed=document.getElementById(pre+'-agency').value.trim();
+  // if the typed name matches an existing agency (ignoring case), reuse that spelling
+  var hit=agencyOptions().filter(function(n){return n.toLowerCase()===typed.toLowerCase();})[0];
+  return hit||typed;
+}
+function setAgency(pre,name){
+  fillAgencySelects();
+  var sel=document.getElementById(pre+'-agency-sel'), inp=document.getElementById(pre+'-agency');
+  var hit=Array.prototype.filter.call(sel.options,function(o){return o.value && o.value!==CUSTOM_VAL && o.value.toLowerCase()===String(name||'').toLowerCase();})[0];
+  if(hit){ sel.value=hit.value; inp.value=''; }
+  else if(name){ sel.value=CUSTOM_VAL; inp.value=name; }
+  else { sel.value=''; inp.value=''; }
+  onAgencyChange(pre);
+  if(!hit && name) inp.value=name;
+}
+
 function refreshAgencyList(){
   var names={};
   allBills().forEach(function(b){ if(b.agency) names[b.agency.trim().toLowerCase()]=b.agency.trim(); });
@@ -657,21 +709,23 @@ function refreshAgencyList(){
   var sel=document.getElementById('sb-agency-filter'), cur=sel.value;
   sel.innerHTML='<option value="">All agencies</option>'+list.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
   sel.value=list.indexOf(cur)!==-1?cur:'';
+  fillAgencySelects();
 }
 function updateAddStatus(){
   var st=statusBoxHtml(document.getElementById('sb-amount').value, document.getElementById('sb-paid').value);
   applyStatus(document.getElementById('sb-add-status'), st);
 }
 function resetAddForm(){
-  ['sb-agency','sb-billno','sb-due','sb-amount','sb-paid'].forEach(function(id){ document.getElementById(id).value=''; });
+  ['sb-billno','sb-due','sb-amount','sb-paid'].forEach(function(id){ document.getElementById(id).value=''; });
   document.getElementById('sb-date').value=localDateStr();
   document.getElementById('sb-paydate').value=localDateStr();
+  setAgency('sb','');
   updateAddStatus();
 }
 var _savingBill=false;
 async function submitBill(){
   if(_savingBill) return;
-  var agency=document.getElementById('sb-agency').value.trim();
+  var agency=getAgency('sb');
   var billNo=document.getElementById('sb-billno').value.trim();
   var date  =document.getElementById('sb-date').value;
   var due   =document.getElementById('sb-due').value;
@@ -679,7 +733,7 @@ async function submitBill(){
   var paid  =parseFloat(document.getElementById('sb-paid').value)||0;
   var payDate=document.getElementById('sb-paydate').value||localDateStr();
 
-  if(!agency){ RP.toast('Enter the agency name.','error'); return; }
+  if(!agency){ RP.toast('Select the agency (or choose Custom and type the name).','error'); return; }
   if(!billNo){ RP.toast('Enter the bill number.','error'); return; }
   if(!date){   RP.toast('Pick the bill date.','error'); return; }
   if(!(amount>0)){ RP.toast('Enter the amount in the bill.','error'); return; }
@@ -836,7 +890,7 @@ var editId=null;
 function openSbEdit(id){
   var b=RP_STOCKBILLS.getById(id); if(!b) return;
   editId=id;
-  document.getElementById('se-agency').value=b.agency;
+  setAgency('se',b.agency);
   document.getElementById('se-billno').value=b.billNo;
   document.getElementById('se-date').value=b.billDate;
   document.getElementById('se-due').value=b.dueDate||'';
@@ -862,7 +916,7 @@ function markFullyPaid(){
 }
 async function saveSbEdit(){
   if(!editId) return;
-  var agency=document.getElementById('se-agency').value.trim();
+  var agency=getAgency('se');
   var billNo=document.getElementById('se-billno').value.trim();
   var date  =document.getElementById('se-date').value;
   var due   =document.getElementById('se-due').value;
