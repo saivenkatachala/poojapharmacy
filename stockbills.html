@@ -108,6 +108,47 @@
   .sb-actions{display:flex;gap:6px;justify-content:flex-end;}
   .table-scroll{overflow-x:auto;}
 
+  /* ---- Edit popup: scrollable body, fixed header + footer ---- */
+  #sb-edit-modal,#sb-del-modal{overflow-y:auto;-webkit-overflow-scrolling:touch;}
+  .sb-modal{
+    max-width:620px;width:100%;max-height:92vh;max-height:92dvh;
+    display:flex;flex-direction:column;padding:0 !important;overflow:hidden;
+  }
+  .sb-modal .modal-header{padding:16px 22px;margin:0;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .sb-modal-body{padding:18px 22px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;flex:1 1 auto;}
+  .sb-modal-foot{
+    padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:10px;
+    justify-content:flex-end;flex-shrink:0;background:var(--surface);
+  }
+  #sb-del-modal .modal{max-height:92vh;max-height:92dvh;overflow-y:auto;}
+  .sb-section{
+    border:1px solid var(--border);border-radius:12px;padding:14px 16px 16px;margin-bottom:14px;background:var(--surface2);
+  }
+  .sb-section-title{
+    font-size:.72rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;
+  }
+  .sb-history{border:1px solid var(--border);border-radius:8px;background:var(--surface);margin-top:12px;overflow:hidden;}
+  .sb-history-title{font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 12px;border-bottom:1px solid var(--border);}
+  .sb-history-row{display:flex;justify-content:space-between;gap:10px;padding:8px 12px;font-size:.82rem;border-bottom:1px solid var(--border);}
+  .sb-history-row:last-child{border-bottom:none;}
+  .sb-history-row b{font-family:'JetBrains Mono',monospace;color:var(--success);}
+  .sb-history-empty{padding:10px 12px;font-size:.8rem;color:var(--muted);}
+
+  /* ---- Thin progress bar flashed on tab / filter / toggle clicks ---- */
+  #sb-topbar{position:fixed;top:0;left:0;height:3px;width:0;background:var(--accent);z-index:99999;opacity:0;pointer-events:none;}
+  #sb-topbar.run{animation:sbBar .55s ease-out;}
+  @keyframes sbBar{0%{width:0;opacity:1;}80%{width:100%;opacity:1;}100%{width:100%;opacity:0;}}
+
+  /* ---- Saving animation on buttons ---- */
+  .btn-spinner{
+    display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;
+    border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;
+    animation:sbSpin .7s linear infinite;
+  }
+  .btn-secondary .btn-spinner,.btn-danger .btn-spinner{border-color:rgba(128,128,128,.35);border-top-color:currentColor;}
+  @keyframes sbSpin{to{transform:rotate(360deg);}}
+  .btn.is-saving{opacity:.85;cursor:wait;pointer-events:none;}
+
   /* ---- Analysis tab (mirrors Stock Sale analysis) ---- */
   .an-cat-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
   .an-cat-chip{
@@ -155,6 +196,7 @@
 </style>
 </head>
 <body>
+<div id="sb-topbar"></div>
 <nav class="navbar">
   <a href="dashboard.html" class="navbar-brand">
     <div class="brand-icon">&#128138;</div><span>Pooja Pharmacy</span>
@@ -171,7 +213,7 @@
   </div>
   <div class="navbar-right">
     <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">&#127769;</button>
-    <button class="logout-btn" onclick="logout()">Logout</button>
+    <button class="logout-btn" onclick="act(this,'Logging out...',logout,500)">Logout</button>
   </div>
 </nav>
 
@@ -182,62 +224,80 @@
     <div class="popup-title">Bill Saved!</div>
     <div class="popup-msg" id="sb-success-msg"></div>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-      <button class="btn btn-primary" onclick="closeSbSuccess()">OK</button>
-      <button class="btn btn-secondary" onclick="closeSbSuccess();switchSbTab('view')">View Bills</button>
+      <button class="btn btn-primary" onclick="act(this,'Closing...',closeSbSuccess,250)">OK</button>
+      <button class="btn btn-secondary" onclick="act(this,'Opening...',function(){closeSbSuccess();switchSbTab('view');},300)">View Bills</button>
     </div>
   </div>
 </div>
 
 <!-- EDIT BILL MODAL -->
 <div class="modal-overlay" id="sb-edit-modal">
-  <div class="modal" style="max-width:560px;">
+  <div class="modal sb-modal">
     <div class="modal-header">
       <h3>Edit Stock Bill</h3>
       <span class="modal-close" onclick="closeSbEdit()">&#10005;</span>
     </div>
-    <div style="padding:4px 0;">
-      <div class="sb-form-grid">
-        <div class="field full">
-          <label>Agency Name</label>
-          <select class="sb-input" id="se-agency-sel" onchange="onAgencyChange('se')"></select>
-          <input class="sb-input" id="se-agency" placeholder="Type the new agency name" autocomplete="off" style="display:none;margin-top:8px;"/>
-        </div>
-        <div class="field">
-          <label>Bill Number</label>
-          <input class="sb-input" id="se-billno"/>
-        </div>
-        <div class="field">
-          <label>Bill Date (order placed)</label>
-          <input class="sb-input" type="date" id="se-date"/>
-        </div>
-        <div class="field">
-          <label>Due Date <span class="hint">optional</span></label>
-          <input class="sb-input" type="date" id="se-due"/>
-        </div>
-        <div class="field">
-          <label>Amount in Bill (Rs.)</label>
-          <input class="sb-input" type="number" id="se-amount" min="0" step="any" oninput="updateEditStatus()"/>
-        </div>
-        <div class="field full">
-          <label>Amount Paid So Far (Rs.)
-            <span class="hint">type the new TOTAL paid — it replaces the old value (e.g. 1200 &rarr; 2000)</span>
-          </label>
-          <div style="display:flex;gap:8px;">
-            <input class="sb-input" type="number" id="se-paid" min="0" step="any" oninput="updateEditStatus()"/>
-            <button class="btn btn-sm btn-secondary" style="white-space:nowrap;" onclick="markFullyPaid()">Mark fully paid</button>
+
+    <div class="sb-modal-body">
+
+      <div class="sb-section">
+        <div class="sb-section-title">1 &middot; Bill Details</div>
+        <div class="sb-form-grid">
+          <div class="field full">
+            <label>Agency Name</label>
+            <select class="sb-input" id="se-agency-sel" onchange="onAgencyChange('se')"></select>
+            <input class="sb-input" id="se-agency" placeholder="Type the new agency name" autocomplete="off" style="display:none;margin-top:8px;"/>
+          </div>
+          <div class="field">
+            <label>Bill Number</label>
+            <input class="sb-input" id="se-billno"/>
+          </div>
+          <div class="field">
+            <label>Amount in Bill (Rs.)</label>
+            <input class="sb-input" type="number" id="se-amount" min="0" step="any" oninput="updateEditStatus()"/>
+          </div>
+          <div class="field">
+            <label>Bill Date <span class="hint">order placed</span></label>
+            <input class="sb-input" type="date" id="se-date"/>
+          </div>
+          <div class="field">
+            <label>Due Date <span class="hint">optional</span></label>
+            <input class="sb-input" type="date" id="se-due"/>
           </div>
         </div>
-        <div class="field full">
-          <label>Payment Date <span class="hint">the day you paid the extra amount (only used if the paid total goes up)</span></label>
-          <input class="sb-input" type="date" id="se-paydate"/>
-          <div class="sb-sub" id="se-history" style="margin-top:8px;"></div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-section-title">2 &middot; Payment</div>
+        <div class="sb-form-grid">
+          <div class="field">
+            <label>Total Paid So Far (Rs.)</label>
+            <input class="sb-input" type="number" id="se-paid" min="0" step="any" oninput="updateEditStatus()"/>
+            <div class="sb-sub" style="margin-top:5px;">Type the new TOTAL (e.g. 1200 &rarr; 2000). It replaces the old value.</div>
+          </div>
+          <div class="field">
+            <label>Payment Date</label>
+            <input class="sb-input" type="date" id="se-paydate"/>
+            <div class="sb-sub" style="margin-top:5px;">Day you paid the extra amount.</div>
+          </div>
+          <div class="field full">
+            <button class="btn btn-sm btn-secondary" onclick="act(this,'Updating...',markFullyPaid,300)">Mark fully paid</button>
+          </div>
         </div>
+
+        <div class="sb-history">
+          <div class="sb-history-title">Payments so far</div>
+          <div id="se-history"></div>
+        </div>
+
+        <div class="sb-status" id="se-status"></div>
       </div>
-      <div class="sb-status" id="se-status"></div>
-      <div class="flex-end" style="margin-top:20px;">
-        <button class="btn btn-secondary" onclick="closeSbEdit()">Cancel</button>
-        <button class="btn btn-primary" id="se-save-btn" onclick="saveSbEdit()">Save Changes</button>
-      </div>
+
+    </div>
+
+    <div class="sb-modal-foot">
+      <button class="btn btn-secondary" onclick="act(this,'Closing...',closeSbEdit,250)">Cancel</button>
+      <button class="btn btn-primary" id="se-save-btn" onclick="saveSbEdit()">Save Changes</button>
     </div>
   </div>
 </div>
@@ -251,8 +311,8 @@
       This removes the bill record only. Your stock and sales are not changed. This cannot be undone.
     </p>
     <div style="display:flex;gap:10px;justify-content:center;">
-      <button class="btn btn-secondary" onclick="closeSbDel()">Cancel</button>
-      <button class="btn btn-danger" onclick="confirmSbDelete()">Delete</button>
+      <button class="btn btn-secondary" onclick="act(this,'Closing...',closeSbDel,250)">Cancel</button>
+      <button class="btn btn-danger" id="sb-del-btn" onclick="confirmSbDelete()">Delete</button>
     </div>
   </div>
 </div>
@@ -319,7 +379,7 @@
           <div class="sb-status" id="sb-add-status">Enter the bill amount to see the payment status.</div>
 
           <div class="flex-end" style="margin-top:18px;">
-            <button class="btn btn-secondary" onclick="resetAddForm()">Reset</button>
+            <button class="btn btn-secondary" onclick="act(this,'Resetting...',resetAddForm,350)">Reset</button>
             <button class="btn btn-primary" id="sb-save-btn" onclick="submitBill()">Save Bill</button>
           </div>
         </div>
@@ -363,7 +423,7 @@
           </select>
           <input class="sb-date" type="date" id="sb-from" onchange="renderBillsTable()" title="Bill date from"/>
           <input class="sb-date" type="date" id="sb-to" onchange="renderBillsTable()" title="Bill date to"/>
-          <button class="btn btn-sm btn-secondary" onclick="clearBillFilters()">Clear</button>
+          <button class="btn btn-sm btn-secondary" onclick="act(this,'Clearing...',clearBillFilters,300)">Clear</button>
         </div>
       </div>
       <div class="card-body">
@@ -556,6 +616,29 @@ function addMonths(ym,n){
 }
 function daysInMonth(ym){ return new Date(parseInt(ym.slice(0,4),10),parseInt(ym.slice(5,7),10),0).getDate(); }
 
+/* Button "Saving..." state with a spinner. Returns a function that restores the button. */
+function btnBusy(btn,label){
+  var original=btn.innerHTML;
+  btn.disabled=true; btn.classList.add('is-saving');
+  btn.innerHTML='<span class="btn-spinner"></span>'+label;
+  return function(){ btn.disabled=false; btn.classList.remove('is-saving'); btn.innerHTML=original; };
+}
+/* Run a button's action after a short spinner, so every click gives feedback. */
+function act(btn,label,fn,ms){
+  if(btn.classList.contains('is-saving')) return;
+  var restore=btnBusy(btn,label);
+  setTimeout(function(){ restore(); fn(); }, ms||350);
+}
+function actEdit(btn,id){ act(btn,'Opening...',function(){ openSbEdit(id); },350); }
+function actDel(btn,id){ act(btn,'Opening...',function(){ openSbDel(id); },300); }
+/* Thin progress bar across the top (tabs, filters, toggles) */
+function flashBar(){
+  var b=document.getElementById('sb-topbar'); if(!b) return;
+  b.classList.remove('run'); void b.offsetWidth; b.classList.add('run');
+}
+/* Keep the animation visible for at least ms, even if the save is instant. */
+function minDelay(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+
 function allBills(){ return RP_STOCKBILLS.getAll(); }
 
 /* Every payment on a bill as [{date, amount}], always adding up to amountPaid.
@@ -612,6 +695,7 @@ function applyStatus(el, st){ el.className='sb-status '+st.cls; el.innerHTML=st.
    TABS
    ========================================================= */
 function switchSbTab(tab){
+  flashBar();
   var order=['add','view','analysis'];
   document.querySelectorAll('.tab-btn').forEach(function(b,i){ b.classList.toggle('active',order[i]===tab); });
   order.forEach(function(t){ document.getElementById('tab-'+t).classList.toggle('active',t===tab); });
@@ -743,17 +827,18 @@ async function submitBill(){
   if(dup){ RP.toast('This agency already has a bill with number '+billNo+'.','warn'); return; }
 
   _savingBill=true;
-  var btn=document.getElementById('sb-save-btn'); btn.disabled=true;
+  var btn=document.getElementById('sb-save-btn');
+  var restore=btnBusy(btn,'Saving...');
   try{
-    var saved=await RP_STOCKBILLS.add({agency:agency,billNo:billNo,billDate:date,dueDate:due,billAmount:amount,amountPaid:paid,
-      payments:paid>0?[{date:payDate,amount:paid}]:[]});
+    var saved=(await Promise.all([RP_STOCKBILLS.add({agency:agency,billNo:billNo,billDate:date,dueDate:due,billAmount:amount,amountPaid:paid,
+      payments:paid>0?[{date:payDate,amount:paid}]:[]}), minDelay(700)]))[0];
     var pend=pendingOf(saved);
     document.getElementById('sb-success-msg').innerHTML=
       esc(agency)+' &middot; Bill '+esc(billNo)+'<br>'+
       (pend>0?'<span style="color:var(--danger);font-weight:700;">&#9888; '+money(pend)+' pending</span>':'<span style="color:var(--success);font-weight:700;">&#10003; Fully paid</span>');
     document.getElementById('sb-success-popup').classList.add('open');
     resetAddForm(); refreshAgencyList(); renderAddTab();
-  } finally { _savingBill=false; btn.disabled=false; }
+  } finally { _savingBill=false; restore(); }
 }
 function closeSbSuccess(){ document.getElementById('sb-success-popup').classList.remove('open'); }
 
@@ -779,7 +864,7 @@ function renderAddTab(){
         (di.text?'<div class="sb-sub '+di.cls+'">'+di.text+'</div>':'')+
       '</div>'+
       '<div><div class="amt">'+money(pendingOf(b))+'</div>'+
-        '<div style="text-align:right;margin-top:5px;"><button class="btn btn-sm btn-secondary" onclick="openSbEdit(\''+b.id+'\')">Update payment</button></div>'+
+        '<div style="text-align:right;margin-top:5px;"><button class="btn btn-sm btn-secondary" onclick="actEdit(this,\''+b.id+'\')">Update payment</button></div>'+
       '</div></div>';
   }).join('');
 }
@@ -789,6 +874,7 @@ function renderAddTab(){
    ========================================================= */
 var statusFilter='all';
 function setStatusFilter(v,el){
+  flashBar();
   statusFilter=v;
   document.querySelectorAll('#sb-status-chips .sb-chip').forEach(function(c){c.classList.remove('active');});
   el.classList.add('active');
@@ -870,8 +956,8 @@ function renderBillsTable(){
         (lastPayDate(b)?'<div class="sb-sub" style="font-family:\'DM Sans\',sans-serif;">Last paid '+RP.fmtDate(lastPayDate(b))+'</div>':'')+'</td>'+
       '<td>'+statusCell+'</td>'+
       '<td><div class="sb-actions">'+
-        '<button class="btn btn-sm btn-secondary" onclick="openSbEdit(\''+b.id+'\')">Edit</button>'+
-        '<button class="btn btn-sm btn-danger" onclick="openSbDel(\''+b.id+'\')">Del</button>'+
+        '<button class="btn btn-sm btn-secondary" onclick="actEdit(this,\''+b.id+'\')">Edit</button>'+
+        '<button class="btn btn-sm btn-danger" onclick="actDel(this,\''+b.id+'\')">Del</button>'+
       '</div></td></tr>';
   }).join('');
 
@@ -899,12 +985,14 @@ function openSbEdit(id){
   document.getElementById('se-paydate').value=localDateStr();
   var pays=paymentsOf(b).sort(function(a,c){return (a.date||'').localeCompare(c.date||'');});
   document.getElementById('se-history').innerHTML=pays.length
-    ? 'Payments so far: '+pays.map(function(p){return money(p.amount)+' on '+RP.fmtDate(p.date);}).join(' &nbsp;&middot;&nbsp; ')
-    : 'No payments recorded yet.';
+    ? pays.map(function(p){return '<div class="sb-history-row"><span>'+RP.fmtDate(p.date)+'</span><b>'+money(p.amount)+'</b></div>';}).join('')
+    : '<div class="sb-history-empty">No payments recorded yet.</div>';
   updateEditStatus();
   document.getElementById('sb-edit-modal').classList.add('open');
+  document.body.style.overflow='hidden';
+  var eb=document.querySelector('#sb-edit-modal .sb-modal-body'); if(eb) eb.scrollTop=0;
 }
-function closeSbEdit(){ document.getElementById('sb-edit-modal').classList.remove('open'); editId=null; }
+function closeSbEdit(){ document.getElementById('sb-edit-modal').classList.remove('open'); document.body.style.overflow=''; editId=null; }
 function updateEditStatus(){
   var st=statusBoxHtml(document.getElementById('se-amount').value, document.getElementById('se-paid').value);
   applyStatus(document.getElementById('se-status'), st);
@@ -931,7 +1019,8 @@ async function saveSbEdit(){
   var dup=allBills().some(function(b){ return b.id!==editId && b.agency.toLowerCase()===agency.toLowerCase() && b.billNo.toLowerCase()===billNo.toLowerCase(); });
   if(dup){ RP.toast('Another bill from this agency already has number '+billNo+'.','warn'); return; }
 
-  var btn=document.getElementById('se-save-btn'); btn.disabled=true;
+  var btn=document.getElementById('se-save-btn');
+  var restoreEdit=btnBusy(btn,'Saving...');
   var old=RP_STOCKBILLS.getById(editId);
   var wasPaid=paidOf(old);
   // Payment log: a higher paid total adds a payment dated "Payment Date";
@@ -940,8 +1029,9 @@ async function saveSbEdit(){
   var delta=r2(paid-r2(old.amountPaid));
   if(delta>0) pays.push({date:payDate,amount:delta});
   pays=paymentsOf({payments:pays,amountPaid:paid,billDate:date});
-  var saved=await RP_STOCKBILLS.update(editId,{agency:agency,billNo:billNo,billDate:date,dueDate:due,billAmount:amount,amountPaid:paid,payments:pays});
-  btn.disabled=false;
+  var saved=(await Promise.all([RP_STOCKBILLS.update(editId,{agency:agency,billNo:billNo,billDate:date,dueDate:due,billAmount:amount,amountPaid:paid,payments:pays}), minDelay(700)]))[0];
+  restoreEdit();
+  updateEditStatus();
   closeSbEdit();
   refreshAgencyList(); renderBillsTable(); renderAddTab();
   if(saved && !wasPaid && paidOf(saved)) RP.toast('Bill fully paid — moved to Paid bills.');
@@ -960,8 +1050,10 @@ function openSbDel(id){
 function closeSbDel(){ document.getElementById('sb-del-modal').classList.remove('open'); delId=null; }
 async function confirmSbDelete(){
   if(!delId) return;
-  var id=delId; closeSbDel();
-  await RP_STOCKBILLS.delete(id);
+  var id=delId;
+  var restoreDel=btnBusy(document.getElementById('sb-del-btn'),'Deleting...');
+  await Promise.all([RP_STOCKBILLS.delete(id), minDelay(600)]);
+  restoreDel(); closeSbDel();
   refreshAgencyList(); renderBillsTable(); renderAddTab();
   RP.toast('Bill deleted.');
 }
@@ -983,6 +1075,7 @@ function destroyChart(k){ if(charts[k]){ try{charts[k].destroy();}catch(e){} cha
 function emptyOverlay(id,show){ document.getElementById(id).classList.toggle('show',show); }
 
 function switchAnCategory(cat,el){
+  flashBar();
   anCat=cat;
   document.querySelectorAll('.an-cat-chip').forEach(function(c){c.classList.remove('active');});
   el.classList.add('active');
@@ -1001,6 +1094,7 @@ function setTrendType(v,el){ trendType=v; activate(el); renderAnalysis(); }
 function setAgMetric(v,el){ agMetric=v; activate(el); renderAnalysis(); }
 function setAgType(v,el){ agType=v; activate(el); renderAnalysis(); }
 function activate(el){
+  flashBar();
   Array.prototype.forEach.call(el.parentNode.querySelectorAll('.chart-toggle-btn'),function(b){b.classList.remove('active');});
   el.classList.add('active');
 }
